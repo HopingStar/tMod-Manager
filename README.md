@@ -66,6 +66,47 @@
 **如何迁移到新电脑？**
 把整个程序目录（含 `data.json`）拷贝过去，安装好运行时后即可直接使用。
 
+## 🚀 构建与运行
+
+需要 .NET SDK 8。NuGet 已配置华为云镜像（`NuGet.config`），无需访问 nuget.org。
+
+```bash
+# 开发运行（仓库根为 BaseDir，读仓库根 data.json / wwwroot）
+dotnet run --project src/TModManager.App
+
+# 运行测试（52 个用例：Core 单元 + 全路由集成 + 存储 / 模组定位，全部用临时目录，绝不碰真实数据）
+dotnet test
+
+# 发布（散装 zip 版；framework-dependent 不打包运行时，启动快，无解压开销）
+dotnet publish src/TModManager.App -c Release -r win-x64 --self-contained false
+```
+
+把 `src/TModManager.App/bin/Release/net8.0-windows/win-x64/publish/` 整个文件夹压缩成 zip 分发即可（内容 = `tModManager.exe` + 依赖 dll + `wwwroot` + `runtimes`，必须整体一起分发）。
+
+## 🏗️ 架构
+
+**单进程一体**：WPF 承载窗口 + 内嵌 ASP.NET Core（Kestrel，`ListenLocalhost(0)` 随机端口）+ WebView2 渲染。
+
+- 前端（`wwwroot/`）通过 `http://127.0.0.1:{随机端口}/` 加载，与后端通过 JSON API（`/api/*`，snake_case）解耦
+- 窗口控制（拖动 / 最小化 / 最大化 / 关闭）通过 Host Objects 注入的 `window.pywebview.api.*` 桥接
+- 前后端解耦 → 换皮肤 / 改 UI 不动后端；后端逻辑全部在 `TModManager.Core`（纯逻辑，可单测）
+
+## 📁 目录结构
+
+```
+src/TModManager.Core/   纯逻辑类库（可单测）
+  ├─ Parsing/    .tmod 文件解析
+  ├─ Icons/      图标缓存 / ICO 解析
+  ├─ Network/    Steam / GitHub / tML 更新检测
+  ├─ Processes/  tML 进程检测 / 强杀
+  ├─ Storage/    data.json / mod_meta.json 读写 + 首启预置
+  ├─ Mods/       模组列表构建 / 特殊加载 / workshop 扫描
+  └─ Versions/   tML 版本号解析
+src/TModManager.App/   WPF + WebView2 + Kestrel 宿主
+src/TModManager.Tests/ xUnit 测试
+wwwroot/               前端（独立副本，直接服务）
+```
+
 ## ℹ️ 关于
 
 - **作者**：HopingStar
