@@ -496,6 +496,7 @@
                             <button type="button" class="settings-nav-item" data-stab="modlist" title="模组列表中直接展示的信息"><i class="fas fa-th-list me-2"></i>模组列表显示</button>
                             <button type="button" class="settings-nav-item" data-stab="tooltip" title="悬浮模组时浮动框里显示的信息"><i class="fas fa-comment-dots me-2"></i>Tooltip 信息</button>
                             <button type="button" class="settings-nav-item" data-stab="global" title="全局优先加载 workshop 模组（禁用本地同名模组）"><i class="fas fa-sliders-h me-2"></i>全局特殊配置</button>
+                            <button type="button" class="settings-nav-item" data-stab="about" title="软件信息、作者与项目主页"><i class="fas fa-info-circle me-2"></i>关于</button>
                         </div>
                         <!-- 右侧板块内容 -->
                         <div class="settings-body">
@@ -606,6 +607,26 @@
                                 <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
                                 <div id="s_globalSpecialMods" class="special-mods-list"></div>
                                 <div id="s_globalSpecialEmpty" class="text-secondary mt-2" style="display:none;">Mods 目录未检测到 .tmod 文件</div>
+                            </div>
+                            <!-- 板块：关于 -->
+                            <div class="settings-pane" id="sp-about" style="display:none;">
+                                <div class="settings-pane-title">ℹ️ 关于</div>
+                                <div class="settings-pane-desc">tModLoader 多版本启动与模组管理工具（C# 版）</div>
+                                <div class="about-card">
+                                    <div class="about-row">
+                                        <span class="about-label"><i class="fas fa-user me-2"></i>作者</span>
+                                        <span class="about-value">HopingStar</span>
+                                    </div>
+                                    <div class="about-row">
+                                        <span class="about-label"><i class="fas fa-book-open me-2"></i>软件简介</span>
+                                        <span class="about-value">tModLoader 多版本启动与模组管理工具：一键启动多版本 / 整合包、特殊加载自动还原、Steam Workshop 模组元数据（本名 / 图标 / 版本 / 热度 / 标签）、tModLoader 更新检测。基于 .NET 8 + WPF + WebView2 构建。</span>
+                                    </div>
+                                    <div class="about-row">
+                                        <span class="about-label"><i class="fab fa-github me-2"></i>项目主页</span>
+                                        <span class="about-value"><a href="javascript:void(0)" onclick="openAboutGithub()" title="打开 GitHub 仓库">https://github.com/HopingStar/tMod-Manager</a></span>
+                                    </div>
+                                </div>
+                                <div class="text-secondary small mt-3"><i class="fas fa-copyright me-1"></i>2026 HopingStar · MIT License</div>
                             </div>
                         </div>
                     </div>

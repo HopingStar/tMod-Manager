@@ -29,11 +29,12 @@ textarea,
     -webkit-user-select: text;
 }
 
-/* 描述界面：允许选中复制（模组详情描述 / 整合包描述预览 / 设置面板说明 / 整合包卡片描述行） */
+/* 描述界面：允许选中复制（模组详情描述 / 整合包描述预览 / 设置面板说明 / 整合包卡片描述行 / 关于板块内容） */
 .mod-detail-desc,
 #descPreviewText,
 .settings-pane-desc,
-.pack-bar-desc {
+.pack-bar-desc,
+.about-value {
     user-select: text;
     -webkit-user-select: text;
 }
@@ -994,4 +995,40 @@ body[data-desktop="true"] #desktopShell {
 .form-check-input:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+}
+/* 关于板块 */
+.about-card {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.about-row {
+    display: flex;
+    gap: 12px;
+    line-height: 1.6;
+}
+.about-label {
+    flex: 0 0 72px;
+    font-weight: 700;
+    color: #e8eaf6;
+    white-space: nowrap;
+}
+.about-value {
+    flex: 1;
+    min-width: 0;
+    color: #b3b6c8;
+    font-size: 13px;
+}
+.about-value a {
+    color: #818cf8;
+    text-decoration: none;
+    word-break: break-all;
+}
+.about-value a:hover {
+    color: #a5b4fc;
+    text-decoration: underline;
 }

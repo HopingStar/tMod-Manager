@@ -952,6 +952,18 @@ function initSettingsModal() {
     bindMetaSwitch('show_tooltip_created', () => showTooltipCreated, v => { showTooltipCreated = v; });
 }
 
+// 关于板块：打开项目 GitHub 主页
+function openAboutGithub() {
+    fetch('/api/open_url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://github.com/HopingStar/tMod-Manager' })
+    })
+        .then(res => res.json())
+        .then(data => { if (!data.ok && data.error) showErrorModal(data.error); })
+        .catch(err => showErrorModal('打开失败: ' + err.message));
+}
+
 function renderSpecialMods(mods) {
     const container = document.getElementById('specialModsList');
     document.getElementById('specialEmpty').style.display = (!mods || mods.length === 0) ? '' : 'none';
