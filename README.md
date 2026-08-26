@@ -3,7 +3,7 @@
 > 一个管理 **tModLoader 多版本启动**与**模组配置**的桌面启动器。
 > **C# 版（本仓库）是唯一维护版本。**
 
-![版本](https://img.shields.io/badge/版本-v2.0-blueviolet)
+![版本](https://img.shields.io/badge/版本-v2.0.0-blueviolet)
 ![.NET](https://img.shields.io/badge/.NET-8-blue)
 ![许可证](https://img.shields.io/badge/License-MIT-green)
 
