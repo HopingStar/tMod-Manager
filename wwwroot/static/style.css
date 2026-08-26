@@ -1,0 +1,997 @@
+/* 全局深色背景与字体 */
+/* html 背景 = 窗口底色（背景板），与 body 一致，滚动时露出也不产生色差 */
+html { background: #0d1320; }
+/* 渐变固定视口层：用 position:fixed 伪元素代替 background-attachment:fixed。
+   background-attachment:fixed 会让 WebView2 每帧软件重绘整屏渐变，拖慢光栅，
+   造成滚动/首绘时图标逐行像素渲染（色块/扫描线）。fixed 伪元素是独立静态层，合成开销小。 */
+html::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(circle at 10% 20%, #1a1a2e, #16213e);
+}
+body {
+    background: transparent;
+    min-height: 100vh;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    /* 界面文本不可选中/复制（描述界面除外，见下方 .mod-detail-desc 等） */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 输入框 / 文本域始终允许编辑选择（禁选不影响录入） */
+input,
+textarea,
+[contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* 描述界面：允许选中复制（模组详情描述 / 整合包描述预览 / 设置面板说明 / 整合包卡片描述行） */
+.mod-detail-desc,
+#descPreviewText,
+.settings-pane-desc,
+.pack-bar-desc {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+/* 卡片效果（无 backdrop-filter：该属性在 WebView2 快速滚动时会渲染出错位色块） */
+.glass-card {
+    background: rgba(24, 35, 66, 0.92) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.version-card {
+    border-left: 4px solid #0d6efd;
+}
+
+/* 输入框深色风格 */
+.form-control, .form-select {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #f0f0f0;
+}
+.form-control:focus, .form-select:focus {
+    background: rgba(0, 0, 0, 0.5) !important;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+}
+
+/* 霓虹按钮 */
+.neon-btn {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border-radius: 50px !important;
+    font-weight: 500;
+}
+.neon-btn::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+.neon-btn:hover::before {
+    opacity: 1;
+}
+.neon-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(13, 110, 253, 0.6);
+}
+.btn-primary.neon-btn:hover {
+    box-shadow: 0 0 30px rgba(13, 110, 253, 0.8);
+}
+.btn-success.neon-btn:hover {
+    box-shadow: 0 0 30px rgba(25, 135, 84, 0.8);
+}
+.btn-outline-info.neon-btn:hover {
+    box-shadow: 0 0 30px rgba(13, 202, 240, 0.8);
+}
+.btn-danger.neon-btn:hover {
+    box-shadow: 0 0 30px rgba(220, 53, 69, 0.8);
+}
+
+/* 标题发光 */
+.text-glow {
+    text-shadow: 0 0 20px rgba(13, 110, 253, 0.3);
+}
+
+.btn-sm {
+    border-radius: 50px !important;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 整合包标签（列表项） */
+.pack-item {
+    border-radius: 12px !important;
+    margin-bottom: 6px;
+    transition: background 0.2s ease;
+}
+.pack-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+.pack-item .btn {
+    border-radius: 30px !important;
+}
+.pack-item .btn-primary {
+    background: #0d6efd;
+    border: none;
+}
+.pack-item .btn-primary:hover {
+    background: #0b5ed7;
+}
+.pack-item .btn-outline-danger {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #dc3545;
+}
+.pack-item .btn-outline-danger:hover {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.pack-item .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 模态框内列表项 */
+.list-group-item {
+    background: transparent !important;
+    color: #e0e0e0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.list-group-item:hover {
+    background: rgba(255,255,255,0.05) !important;
+}
+
+/* 闪烁动画 */
+.blink-green {
+    animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+/* 状态栏微调 */
+#statusBar .status-dot {
+    transition: background-color 0.3s ease;
+}
+
+/* 视图切换按钮（active 时保持亮色文字，避免 bootstrap 默认黑字看不清） */
+#viewSwitch .btn.active {
+    color: #0dcaf0;
+    background: rgba(13, 202, 240, 0.15);
+    border-color: #0dcaf0;
+    box-shadow: 0 0 12px rgba(13, 202, 240, 0.5);
+}
+
+/* 收藏星标按钮 */
+.fav-btn {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 1.15rem;
+    padding: 2px 6px;
+    line-height: 1;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+.fav-btn:hover { color: #ffc107; transform: scale(1.2); }
+.fav-btn i.faved { color: #ffc107; }
+
+/* 通用图标按钮（编辑/重命名铅笔） */
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    font-size: 1.02rem;
+    padding: 2px 6px;
+    line-height: 1;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+.icon-btn:hover { color: #0dcaf0; transform: scale(1.15); }
+
+/* 整合包视图：每个整合包一个横向长条卡片 */
+.pack-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 16px;
+    margin-bottom: 10px;
+    border-radius: 12px !important;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.pack-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.pack-bar:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    transform: translateY(-1px);
+}
+.pack-bar-name {
+    font-weight: 600;
+    flex-shrink: 0;
+    min-width: 150px;
+    max-width: 35%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* 描述独立成一行，位于主行下方，不影响 chip/按钮位置 */
+.pack-bar-desc {
+    font-size: 0.82rem;
+    color: #8a93a1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 4px;
+}
+.pack-bar-versions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+.pack-bar-version {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(13, 202, 240, 0.08);
+    border: 1px solid rgba(13, 202, 240, 0.22);
+    border-radius: 9px;
+    padding: 4px 8px;
+    max-width: 100%;
+}
+.pack-bar-version span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* 右侧操作区：启动按钮 + 收藏，整体靠右 */
+.pack-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.pack-bar .fav-btn {
+    flex-shrink: 0;
+}
+
+/* 模组列表（弹窗内） */
+.mods-list {
+    /* 拉长但不超出屏幕：大屏最多 560px，小屏随视口收缩 */
+    max-height: min(560px, calc(100vh - 300px));
+    overflow-y: auto;
+    will-change: transform;   /* 提升为合成层：滚动只移动图层，不逐像素重绘内部图片（消除逐行渲染） */
+    transform: translateZ(0);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.15);
+    user-select: none;           /* 模组名等文本不可选中（点击不产生文本高亮） */
+    -webkit-user-select: none;
+}
+.mod-item {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-bottom: 2px;
+    transition: background 0.15s ease;
+    overflow: hidden;
+}
+/* 第一行：图标 + 名称（省略号）；徽章在模组名下开始（对齐模组名，不从图标开始） */
+.mod-item-main {
+    display: flex;
+    align-items: center;   /* 无额外信息时名称与图标垂直居中；有额外信息时名称相对图标微微上移 */
+    overflow: hidden;
+}
+.mod-item-text {
+    flex: 1;
+    min-width: 0;
+}
+.mod-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mod-item.enabled { color: #75e6a5; }
+/* 已启用模组：内部名（id）也显示为绿色（Bootstrap .text-secondary 带 !important，需同级别覆盖） */
+.mod-item.enabled .mod-item-label .text-secondary { color: inherit !important; }
+.mod-item.enabled:hover { background: rgba(25, 135, 84, 0.18); }
+.mod-item.disabled { color: #8a93a1; }
+.mod-item.disabled:hover { background: rgba(255, 255, 255, 0.06); }
+.mod-item.missing { color: #f19b9b; text-decoration: line-through; }
+
+/* 模组图标（Steam 封面图缩略） */
+.mod-icon, .special-mod .mod-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    object-fit: cover;
+    vertical-align: -5px;
+    margin-right: 6px;
+    background: rgba(255, 255, 255, 0.06);
+}
+/* 整合包模组列表弹窗内图标 */
+.mods-list .mod-icon {
+    width: 32px;
+    height: 32px;
+    vertical-align: -7px;
+    border-radius: 6px;
+}
+
+/* 本地 + workshop 同名模组标注（独立一行，避免被长模组名省略号截掉） */
+.mod-conflict-badge {
+    display: block;
+    width: fit-content;
+    color: #ff9800;
+    font-size: 0.7rem;
+    border: 1px solid rgba(255, 152, 0, 0.4);
+    border-radius: 8px;
+    padding: 0 6px;
+    margin-top: 3px;
+    white-space: nowrap;
+}
+
+/* 模组来源徽章（整合包 / 本地 / Workshop 组合标注） */
+.mod-src-badge {
+    display: block;
+    width: fit-content;
+    color: #8a5dff;
+    font-size: 0.7rem;
+    border: 1px solid rgba(138, 93, 255, 0.4);
+    border-radius: 8px;
+    padding: 0 6px;
+    margin-top: 3px;
+    white-space: nowrap;
+}
+
+/* 最近更新标注（蓝色）：显示 Steam 最近一次更新距今天数 */
+.mod-update-badge {
+    display: block;
+    width: fit-content;
+    color: #7fd0ff;
+    font-size: 0.7rem;
+    border: 1px solid rgba(13, 202, 240, 0.5);
+    border-radius: 8px;
+    padding: 0 6px;
+    margin-top: 3px;
+    white-space: nowrap;
+    background: rgba(13, 202, 240, 0.1);
+}
+
+/* 模组标签（紫色胶囊，独立一行，可换行） */
+.mod-tags-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 3px;
+}
+.mod-tag {
+    color: #c3b5ff;
+    font-size: 0.68rem;
+    border: 1px solid rgba(138, 93, 255, 0.4);
+    border-radius: 8px;
+    padding: 0 6px;
+    background: rgba(138, 93, 255, 0.1);
+    white-space: nowrap;
+}
+
+/* 模组统计行（emoji 信息，独立一行） */
+.mod-stats-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-top: 3px;
+}
+.mod-stat {
+    color: #9db0c8;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+/* 模组详情弹窗 */
+.mod-detail-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    object-fit: cover;
+}
+/* 图标 + 标签：标签显示在图标右侧空白处 */
+.mod-detail-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.mod-detail-head .mod-detail-icon {
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+.mod-detail-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-top: 6px;
+    flex: 1;
+}
+.mod-detail-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 12px;
+}
+.mod-detail-desc {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.15);
+    font-size: 0.88rem;
+    max-height: 360px;
+    overflow-y: auto;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+}
+.mod-detail-desc h1 { font-size: 1.15rem; margin: 10px 0 4px; }
+.mod-detail-desc h2 { font-size: 1.08rem; margin: 8px 0 4px; }
+.mod-detail-desc h3, .mod-detail-desc h4 { font-size: 1rem; margin: 6px 0 4px; }
+.mod-detail-desc ul, .mod-detail-desc ol { margin: 6px 0; padding-left: 22px; }
+.mod-detail-desc li { margin: 2px 0; }
+.mod-detail-desc a { color: #0dcaf0; text-decoration: underline; }
+.mod-detail-desc hr { border: none; border-top: 1px solid rgba(255, 255, 255, 0.12); margin: 10px 0; }
+.mod-detail-desc blockquote {
+    border-left: 3px solid rgba(13, 202, 240, 0.4);
+    padding: 4px 10px;
+    margin: 6px 0;
+    background: rgba(255, 255, 255, 0.03);
+    color: #9db0c8;
+}
+.mod-detail-desc .bb-quote-author { font-weight: 600; color: #0dcaf0; }
+
+/* 特殊加载项按钮：未启用灰色，启用后紫色发光 */
+.special-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #8a93a1;
+    font-size: 0.82rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+.special-btn:hover { background: rgba(255, 255, 255, 0.08); color: #c3b5ff; }
+.special-btn.special-active {
+    background: rgba(138, 93, 255, 0.28);
+    border-color: #8a5dff;
+    color: #c3b5ff;
+    box-shadow: 0 0 12px rgba(138, 93, 255, 0.55);
+}
+/* 启用独立配置：橙色发光 */
+.special-btn.special-independent {
+    background: rgba(255, 152, 0, 0.28);
+    border-color: #ff9800;
+    color: #ffd28a;
+    box-shadow: 0 0 12px rgba(255, 152, 0, 0.55);
+}
+
+/* 特殊加载项模组列表（纵向排布） */
+.special-mods-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    will-change: transform;   /* 提升为合成层：滚动只移动图层，不逐像素重绘内部图片 */
+    transform: translateZ(0);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.15);
+}
+.special-mod {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.04);
+    transition: border-color 0.15s ease, background 0.15s ease;
+    font-size: 0.88rem;
+}
+.special-mod > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.special-mod:hover { background: rgba(255, 255, 255, 0.08); }
+.special-mod.selected {
+    border-color: #8a5dff;
+    background: rgba(138, 93, 255, 0.18);
+    color: #d6c8ff;
+}
+.special-mod-badge { font-size: 0.75rem; color: #ff6b6b; }
+/* 锁定（未开启开关）时仅未选中项变淡，选中项保持紫色醒目 */
+.special-mods-list.locked .special-mod:not(.selected) { opacity: 0.5; }
+
+/* ---------- pywebview 独立窗口：直角壳 + 自绘标题栏 ---------- */
+/* 窗口底色 #16213e 与页面背景一致，直角矩形（无圆角） */
+body[data-desktop="true"] {
+    /* 与 WPF 窗口背景同色：WebView2 内缩 3px 时露出的窗口背景 #0d1320 即背景板，无缝融入 */
+    background: #0d1320 !important;
+    margin: 0;
+    overflow: hidden;
+    min-height: 0;
+}
+/* 自绘标题栏；拖动由原生 WM_NCLBUTTONDOWN 完成（js_api.start_drag），非 CSS drag */
+#winTitlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+    padding: 0 0 0 14px;
+    background: rgba(10, 14, 28, 0.92);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    user-select: none;
+    -webkit-user-select: none;
+}
+/* 界面边框容器：整个窗口（标题栏 + 内容区）铺满 WebView2 视口。
+   窗口边缘的 3px 背景板由 WPF 层（WebView2 内缩 3px 露出的窗口背景 #0d1320）提供，
+   与页面 body 同色无缝融入；全屏时 WebView2 边距归零，界面顶到屏幕边缘。 */
+body[data-desktop="true"] #appFrame {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at 10% 20%, #1a1a2e, #16213e);
+    overflow: hidden;
+}
+/* 标题栏：位于边框容器内顶部（含标题栏的整个界面边缘都被框住） */
+body[data-desktop="true"] #winTitlebar {
+    position: relative;
+    flex-shrink: 0;
+}
+/* 内容壳：承载滚动，占满容器剩余高度 */
+body[data-desktop="true"] #desktopShell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.win-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #c3b5ff;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+.win-controls {
+    display: flex;
+    height: 100%;
+}
+.win-btn {
+    background: transparent;
+    border: none;
+    color: #9db0c8;
+    width: 46px;
+    height: 100%;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.win-btn:hover { background: rgba(255, 255, 255, 0.1); color: #e0e0e0; }
+.win-btn-close:hover { background: rgba(220, 53, 69, 0.85); color: #fff; }
+
+/* ---------- tModLoader 更新检测 ---------- */
+/* 状态栏更新信息容器：JS 通过内联 display 控制显隐（不用 Bootstrap d-flex，避免 !important 覆盖隐藏） */
+.tmod-update-wrap { display: flex; align-items: center; }
+/* 状态栏全局更新信息（最新版号 + 更新于 N 天前，蓝色徽章） */
+.tmod-global-update {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #7fd0ff;
+    border: 1px solid rgba(13, 202, 240, 0.5);
+    border-radius: 20px;
+    padding: 2px 10px;
+    background: rgba(13, 202, 240, 0.1);
+    white-space: nowrap;
+}
+/* 状态颜色：成功=蓝 / 离线=灰 / 获取失败=红 */
+.tmod-update-wrap.tmod-update-ok .tmod-global-update {
+    color: #7fd0ff;
+    border-color: rgba(13, 202, 240, 0.5);
+    background: rgba(13, 202, 240, 0.1);
+}
+.tmod-update-wrap.tmod-update-offline .tmod-global-update {
+    color: #8a93a1;
+    border-color: rgba(138, 147, 161, 0.45);
+    background: rgba(138, 147, 161, 0.1);
+}
+.tmod-update-wrap.tmod-update-failed .tmod-global-update {
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.5);
+    background: rgba(255, 107, 107, 0.12);
+}
+/* 版本卡片名称旁的「有可用更新」：圆角流光边框 + 流光彩色文字，动画从左到右
+   结构：.tmod-update-rainbow(渐变边框层) > .tur-inner(深色遮中心) > .tur-text(流光文字) */
+.tmod-update-rainbow {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px;
+    border-radius: 20px;
+    background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #b983ff, #ff6b6b);
+    background-size: 300% 100%;
+    animation: rainbowFlow 3s linear infinite;
+    vertical-align: middle;
+    user-select: none;
+}
+.tur-inner {
+    display: block;
+    background: #1a1a2e;
+    border-radius: 17px;
+    padding: 1px 9px;
+}
+.tur-text {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #b983ff, #ff6b6b);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: rainbowFlow 3s linear infinite;
+}
+/* background-position 从 300% 移向 0%：背景向右移动 → 色彩从左到右流动 */
+@keyframes rainbowFlow {
+    0% { background-position: 300% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* 描述/简介文本支持鼠标选中（配合一键复制按钮；窗口标题栏拖动区除外）。
+   悬浮时切换为文本光标（I 形），提示用户可以选中文本 */
+#descPreviewText,
+.mod-detail-desc,
+#modDetailTitle {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+}
+
+/* ---------- 模组列表弹窗：高度固定为窗口高度的 92%，不随模组数量伸缩 ---------- */
+#packModsModal .modal-dialog {
+    height: 92vh;
+    max-height: 92vh;
+    min-height: 0 !important;       /* 覆盖 bootstrap .modal-dialog-centered 的 min-height 撑满 */
+    margin: 4vh auto !important;    /* 上下各留 4vh，水平 auto 居中 */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;           /* content 水平拉伸满宽（覆盖 centered 的 center） */
+    justify-content: flex-start;    /* content 从顶部排布 */
+}
+#packModsModal .modal-content {
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;   /* 内容总高超出时裁剪，防止弹窗整体滚动 */
+}
+#packModsModal .modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;        /* 弹窗主体不滚动，滚动只发生在列表内部 */
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 1.5rem;  /* 列表底部留空位 */
+}
+#packModsModal .row {
+    flex: 1;                 /* 列表区域占满弹窗剩余高度 */
+    min-height: 0;
+    align-items: stretch;
+}
+#packModsModal .col-md-4,
+#packModsModal .col-md-6,
+#packModsModal .col-md-8 {
+    height: 100%;        /* 固定列高 = row 高度，否则列被内容撑高、列表永不溢出 */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+#packModsModal .col-md-4 h6,
+#packModsModal .col-md-6 h6,
+#packModsModal .col-md-8 h6 {
+    flex-shrink: 0;
+}
+/* 三列列表：高度随模组数量自然伸长；内容超过弹窗空间时才压缩到底部并滚动 */
+#packModsModal .mods-list {
+    flex: 0 1 auto;   /* 不拉伸（随内容伸长）；超出弹窗空间时压缩到底部并启用滚动 */
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+}
+/* 标题与搜索行不参与压缩，保持固定高度 */
+#packModsModal .modal-body > h6,
+#packModsModal .modal-body > .d-flex {
+    flex-shrink: 0;
+}
+
+/* ---------- 模组列表：搜索 + 标签筛选 ---------- */
+/* 筛选按钮：有选中标签时变为橙色 */
+#modFilterBtn.mod-filter-on {
+    background: #ff9800 !important;
+    border-color: #ff9800 !important;
+    color: #fff !important;
+    box-shadow: 0 0 12px rgba(255, 152, 0, 0.6) !important;
+}
+/* 已选标签计数：紫色纯色圆框，叠在筛选按钮右上角（badge 位置） */
+.mod-filter-count {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    background: #8a5dff;
+    color: #fff;
+    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    padding: 0 4px;
+    box-shadow: 0 0 6px rgba(138, 93, 255, 0.5);
+    pointer-events: none;
+}
+/* 标签下拉面板 */
+.mod-filter-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1060;
+    min-width: 230px;
+    max-width: 340px;
+    padding: 10px;
+    background: rgba(16, 22, 38, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.mod-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+.mod-filter-tag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: #c3b5ff;
+    transition: background 0.15s ease;
+}
+.mod-filter-tag:hover { background: rgba(138, 93, 255, 0.15); }
+.mod-filter-tag.on { background: rgba(138, 93, 255, 0.25); }
+.mod-filter-tag input { accent-color: #8a5dff; cursor: pointer; }
+/* 模组列表检测源切换按钮：显示整合包文件夹 mods 时高亮 */
+.pack-source-active {
+    background: #ffc107 !important;
+    border-color: #ffc107 !important;
+    color: #111 !important;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.55);
+}
+.pack-source-active:hover {
+    background: #ffca2c !important;
+    border-color: #ffca2c !important;
+    color: #111 !important;
+}
+
+/* 模组悬浮 Tooltip（浮动框，内容受全局设置控制） */
+.mod-tooltip {
+    position: fixed;
+    z-index: 1090;
+    max-width: 280px;
+    background: rgba(18, 18, 26, 0.97);
+    color: #e0e0e0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 152, 0, 0.55);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+.mod-tooltip .tt-ver {
+    color: #ff9800;
+    font-weight: bold;
+}
+.mod-tooltip .tt-name {
+    color: #58a6ff;   /* 模组名：蓝色，不加粗（置顶显示） */
+    font-weight: 400;
+}
+.mod-tooltip .tt-stat {
+    color: #b8bfc9;   /* 热度 / 大小 / 创建时间行 */
+    font-weight: 500;
+}
+.mod-tooltip .tt-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.mod-tooltip .tt-tag {
+    display: inline-block;
+    color: #c3b5ff;
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: rgba(138, 93, 255, 0.18);
+    border: 1px solid rgba(138, 93, 255, 0.4);
+    border-radius: 8px;
+    padding: 0 6px;
+    line-height: 1.4;
+}
+
+/* 模组详情弹窗浮在所有其它弹窗之上（如「当前 enabled.json」弹窗） */
+#modDetailModal { z-index: 2060; }
+
+/* ========== 自定义右键菜单（替换 Chromium 默认菜单） ========== */
+#ctx-menu {
+    position: fixed;
+    z-index: 2100;
+    min-width: 200px;
+    padding: 4px;
+    background: rgba(24, 28, 46, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    user-select: none;
+}
+#ctx-menu .ctx-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: #e8eaf6;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s;
+}
+#ctx-menu .ctx-item:hover {
+    background: rgba(99, 102, 241, 0.28);
+}
+#ctx-menu .ctx-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ========== 全局设置弹窗（分板块：左侧垂直导航 + 右侧内容，参考 ImageViewer_c 风格） ========== */
+#settingsModal .modal-dialog { max-width: 720px; }
+.settings-layout {
+    display: flex;
+    gap: 16px;
+    min-height: 340px;
+}
+.settings-nav {
+    flex: 0 0 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+}
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #b3b6c8;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.settings-nav-item:hover { background: rgba(99, 102, 241, 0.18); color: #e8eaf6; }
+.settings-nav-item.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.55), rgba(138, 93, 255, 0.45));
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.35);
+}
+.settings-body {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    /* 主设置区域不滚动：只有全局特殊配置的模组列表内部滚动 */
+    overflow: hidden;
+}
+/* 全局特殊配置板块：仅模组列表内部滚动（弹窗主体不滑动） */
+#sp-global .special-mods-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+.settings-pane-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #e8eaf6;
+    margin-bottom: 4px;
+}
+.settings-pane-desc {
+    font-size: 12.5px;
+    color: #9aa0b5;
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+/* 板块总开关：置顶的开关，与下方设置用一条分隔线隔开（子开关区 border-top 即分隔线），无卡片背景 */
+.settings-master-toggle {
+    margin-bottom: 0.9rem;
+}
+.settings-master-toggle .form-check-input:checked {
+    background-color: #6366f1;
+    border-color: #6366f1;
+}
+/* 子开关被总开关关闭时置灰 */
+.form-check-input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}

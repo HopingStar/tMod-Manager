@@ -1,0 +1,19 @@
+<Window x:Class="TModManager.App.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="tModLoader 启动器"
+        Width="1266" Height="782" MinWidth="960" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None" ResizeMode="CanResize"
+        Background="#0d1320">
+    <WindowChrome.WindowChrome>
+        <!-- 标准 WindowChrome 缩放：边缘 6px 原生 resize（缩放 100% 可靠） -->
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+    <!-- 关键：WebView2 四周内缩 4px。WebView2 的 Chrome_WidgetWin 子窗口铺满客户区时会吞掉边缘 WM_NCHITTEST
+         导致缩放失效；内缩后边缘 4px 是 WPF 窗口自身背景（#0d1320，与页面 body 同色无缝衔接），
+         由 WindowChrome 原生处理边缘缩放，与加载状态无关。
+         全屏（工作区最大化）时 WindowChromeService 回调把边距改为 0，界面顶到屏幕边缘。 -->
+    <wv2:WebView2 x:Name="webView" Margin="4" DefaultBackgroundColor="#0d1320" />
+</Window>

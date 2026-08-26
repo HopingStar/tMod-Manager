@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ tModLoader 整合包启动器</title>
+    <!-- 启动遮罩样式内联：不依赖外部 CSS/CDN，保证首帧立即显示加载动画 -->
+    <style>
+        #bootOverlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: #16213e;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .boot-box { text-align: center; }
+        .boot-spinner {
+            width: 46px; height: 46px; margin: 0 auto 18px;
+            border: 4px solid rgba(255, 255, 255, 0.12);
+            border-top-color: #0dcaf0; border-right-color: rgba(13, 202, 240, 0.6);
+            border-radius: 50%;
+            animation: bootSpin 0.85s linear infinite;
+        }
+        @keyframes bootSpin { to { transform: rotate(360deg); } }
+        .boot-text { color: #9db0c8; font-size: 0.9rem; letter-spacing: 0.5px; }
+    </style>
+    <!-- 本地资源（已从 CDN 下载到 static/vendor，避免首次加载的网络延迟/图标延迟） -->
+    <link href="/static/vendor/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/vendor/fontawesome.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-desktop="true">
+    <!-- 启动加载遮罩：数据就绪后淡出 -->
+    <div id="bootOverlay">
+        <div class="boot-box">
+            <div class="boot-spinner"></div>
+            <div class="boot-text"><i class="fas fa-rocket me-1"></i>tModLoader 启动器加载中…</div>
+        </div>
+    </div>
+    <!-- 界面边框容器：整个窗口（含标题栏 + 内容区）统一边框，四周留 3px 背景板 -->
+    <div id="appFrame">
+    <!-- 自绘窗口标题栏（仅 pywebview 独立窗口显示；浏览器模式隐藏） -->
+    <div id="winTitlebar" style="display:none;">
+        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModLoader 启动器 <span class="text-info small" id="appVersion" title="构建版本">v2.0</span></span>
+        <div class="win-controls">
+            <button class="win-btn" id="winMinBtn" title="最小化"><i class="fas fa-minus"></i></button>
+            <button class="win-btn" id="winMaxBtn" title="全屏 / 还原"><i class="fas fa-expand"></i></button>
+            <button class="win-btn win-btn-close" id="winCloseBtn" title="关闭"><i class="fas fa-times"></i></button>
+        </div>
+    </div>
+    <div id="desktopShell">
+    <div class="container my-5">
+        <!-- 主标题 -->
+        <div class="text-center mb-3">
+            <h1 class="display-4 fw-bold text-glow">
+                <i class="fas fa-rocket text-primary me-2"></i>tModLoader 启动器
+            </h1>
+            <p class="text-secondary">多版本 · 全局整合包 · 一键启动</p>
+        </div>
+
+        <!-- 状态栏 -->
+        <div id="statusBar" class="glass-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between border-0" style="background: rgba(0,0,0,0.3) !important; border-radius: 15px;">
+            <div class="d-flex align-items-center gap-4">
+                <!-- 后端状态 -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold">后端：</span>
+                    <span id="backendIndicator" class="status-dot" style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background-color: #6c757d;"></span>
+                    <span id="backendText" class="text-secondary">检测中...</span>
+                </div>
+                <!-- tModLoader 状态 -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold">tModLoader：</span>
+                    <span id="tmodIndicator" class="status-dot" style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background-color: #6c757d;"></span>
+                    <span id="tmodText" class="text-secondary">检测中...</span>
+                </div>
+                <!-- tModLoader 最新版更新信息（更新对比开关关闭 / 无数据时隐藏） -->
+                <div id="tmodUpdateWrap" class="tmod-update-wrap" style="display:none;">
+                    <span class="tmod-global-update" id="tmodUpdateText"></span>
+                </div>
+            </div>
+            <!-- 最近启动信息和关闭按钮 -->
+            <div id="lastLaunchInfo" class="d-flex align-items-center gap-3 text-secondary" style="font-size: 0.9rem;">
+                <div><i class="fas fa-history me-1"></i><span id="lastLaunchText">暂无启动记录</span></div>
+                <button id="killGameBtn" class="btn btn-sm btn-danger neon-btn" style="display: none;" onclick="killGame()">
+                    <i class="fas fa-stop-circle me-1"></i>关闭游戏
+                </button>
+            </div>
+        </div>
+
+        <!-- 视图切换 + 全局操作按钮 -->
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="btn-group" role="group" id="viewSwitch">
+                    <button type="button" class="btn btn-outline-info neon-btn active" id="btnViewVersions" onclick="switchView('versions')">
+                        <i class="fas fa-layer-group me-1"></i>以版本显示
+                    </button>
+                    <button type="button" class="btn btn-outline-info neon-btn" id="btnViewPacks" onclick="switchView('packs')">
+                        <i class="fas fa-boxes me-1"></i>以整合包显示
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-success neon-btn" onclick="launchCurrentNow()" title="用上次启动的 .bat 直接启动，不动 enabled.json">
+                    <i class="fas fa-play me-1"></i>启动游戏（当前配置）
+                </button>
+                <button class="btn btn-sm btn-outline-info neon-btn" onclick="openCurrentEnabled()">
+                    <i class="fas fa-th-list me-1"></i>当前 enabled.json
+                </button>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-primary neon-btn" onclick="openAddVersionModal()" title="添加一个新的 tModLoader 版本">
+                    <i class="fas fa-plus me-1"></i>添加版本
+                </button>
+                <button class="btn btn-sm special-btn" id="settingsBtn" onclick="openSettings()" title="全局设置（更新检测 / 模组列表显示 / Tooltip 信息）">
+                    <i class="fas fa-cog me-1"></i>全局设置
+                </button>
+                <button class="btn btn-outline-info neon-btn" onclick="openModPacks()">
+                    <i class="fas fa-folder-open me-1"></i>打开 ModPacks 文件夹
+                </button>
+            </div>
+        </div>
+
+        <!-- 版本列表 -->
+        <div id="versionList"></div>
+
+        <!-- 整合包视图列表（以整合包显示时使用） -->
+        <div id="packListView" style="display:none;"></div>
+    </div>
+    </div>
+    </div>
+
+    <!-- 添加版本模态框 -->
+    <div class="modal fade" id="addVersionModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-folder-plus me-2"></i>添加版本</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">版本名称</label>
+                        <input type="text" class="form-control bg-dark border-0" id="versionName" placeholder="版本名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">启动 .bat 路径</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control bg-dark border-0" id="batPath" placeholder="启动文件路径">
+                            <button type="button" class="btn btn-outline-info neon-btn" onclick="pickBatFile('batPath')"><i class="fas fa-folder-open me-1"></i>浏览</button>
+                        </div>
+                    </div>
+                    <div class="text-secondary" style="font-size: 0.85rem;">
+                        <i class="fas fa-magic me-1"></i>版本号自动从安装目录的 tModLoader.dll 检测<br>
+                        <i class="fas fa-info-circle me-1"></i>所有版本共用 Mods 目录：<code>D:\Documents\My Games\Terraria\tModLoader\Mods</code>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" id="saveAddVersionBtn"><i class="fas fa-plus me-1"></i>添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加整合包模态框 -->
+    <div class="modal fade" id="addPackModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-box me-2"></i>添加整合包</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary">选择要添加的整合包：</p>
+                    <div id="modalPackList" class="list-group">
+                        <!-- 动态渲染 -->
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑版本模态框 -->
+    <div class="modal fade" id="versionEditModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-pen me-2"></i>编辑版本</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editVersionId">
+                    <div class="mb-3">
+                        <label class="form-label">版本名称</label>
+                        <input type="text" class="form-control bg-dark border-0" id="editVersionName" placeholder="版本名称">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">启动 .bat 路径</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control bg-dark border-0" id="editBatPath" placeholder="启动文件路径">
+                            <button type="button" class="btn btn-outline-info neon-btn" onclick="pickBatFile('editBatPath')"><i class="fas fa-folder-open me-1"></i>浏览</button>
+                        </div>
+                    </div>
+                    <div class="text-secondary" style="font-size: 0.85rem;">
+                        <i class="fas fa-magic me-1"></i>版本号自动从安装目录的 tModLoader.dll 检测
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" onclick="saveVersionEdit()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 整合包描述模态框（预览 + 编辑双模式） -->
+    <div class="modal fade" id="packDescModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-align-left me-2"></i>整合包描述</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="descPackId">
+                    <!-- 预览模式（只读） -->
+                    <div id="descPreviewMode">
+                        <p id="descPreviewText" class="text-secondary mb-0" style="white-space:pre-wrap;"></p>
+                        <div class="d-flex align-items-center justify-content-between mt-2 flex-wrap gap-2">
+                            <div class="form-text mb-0" style="color:#ff9800; font-weight:600;">整合包名称固定对应文件夹名，不可修改</div>
+                            <button type="button" class="btn btn-sm btn-outline-info neon-btn" onclick="copyPackDesc()"><i class="fas fa-copy me-1"></i>复制描述</button>
+                        </div>
+                    </div>
+                    <!-- 编辑模式 -->
+                    <div id="descEditMode" style="display:none;">
+                        <label class="form-label">描述（可留空）</label>
+                        <textarea class="form-control bg-dark border-0" id="packDescInput" rows="4" placeholder="添加整合包说明，如模组内容、注意事项等"></textarea>
+                        <div class="form-text" style="color:#ff9800; font-weight:600;">整合包名称固定对应文件夹名，不可修改</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="descCloseBtn">关闭</button>
+                    <button type="button" class="btn btn-primary neon-btn" id="descEditBtn" onclick="enterDescEdit()"><i class="fas fa-pen me-1"></i>修改</button>
+                    <button type="button" class="btn btn-secondary" id="descCancelBtn" style="display:none;" onclick="exitDescEdit()">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" id="descSaveBtn" style="display:none;" onclick="savePackDesc()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 整合包模组列表模态框 -->
+    <div class="modal fade" id="packModsModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width:1200px;">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-th-list me-2"></i>整合包模组</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-info neon-btn" id="modMetaRefreshBtn" onclick="refreshModMetaFromMods()"><i class="fas fa-sync me-1"></i>刷新模组元数据</button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div id="modMetaHint" style="display:none;"></div>
+                    <h6 id="packModsTitle" class="text-info mb-2"></h6>
+                    <!-- 检测源提示（橙色加粗） -->
+                    <div class="d-flex align-items-center mb-3" id="packModsSourceRow">
+                        <span class="fw-bold" style="color:#ff9800; font-size:0.95rem;"><i class="fas fa-map-marker-alt me-1"></i><span id="packModsSourceText">检测源：Workshop + 本地</span></span>
+                    </div>
+                    <!-- 搜索 + 标签筛选 -->
+                    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                        <div class="input-group" style="max-width:300px;">
+                            <span class="input-group-text bg-dark border-0"><i class="fas fa-search text-secondary"></i></span>
+                            <input type="text" class="form-control bg-dark border-0" id="modSearchInput" placeholder="搜索模组名称...">
+                        </div>
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-outline-info neon-btn position-relative" id="modFilterBtn" onclick="toggleModFilterDropdown()" title="按标签筛选">
+                                <i class="fas fa-filter"></i>
+                            </button>
+                            <span class="mod-filter-count" id="modFilterCount" style="display:none;">0</span>
+                            <div class="mod-filter-dropdown" id="modFilterDropdown" style="display:none;">
+                                <div class="mod-filter-list" id="modFilterTags"></div>
+                                <button class="btn btn-sm btn-outline-danger neon-btn w-100 mt-2" onclick="clearModFilter()"><i class="fas fa-eraser me-1"></i>清空筛选</button>
+                            </div>
+                        </div>
+                        <!-- 工具栏：启用/禁用切换（仅版本模式的合并列表）。Tooltip 开关已移至全局设置 -->
+                        <button class="btn btn-sm btn-outline-info neon-btn" id="modsMergedBtn" onclick="cycleMergedFilter()" title="切换显示已启用 / 未启用模组（不影响缺失列）" style="display:none;"><i class="fas fa-layer-group me-1"></i>全部</button>
+                    </div>
+                    <div class="row g-3">
+                        <!-- 合并列（版本模式）：绿色=已启用上移，灰色=未启用下移 -->
+                        <div class="col-md-6" id="mergedModsWrap" style="display:none;">
+                            <h6><i class="fas fa-layer-group me-1"></i>模组 <span id="mergedCount" class="text-success small">0</span> <span id="mergedHint" class="text-secondary small">（绿色=已启用 / 灰色=未启用）</span></h6>
+                            <div id="mergedModsList" class="mods-list"></div>
+                        </div>
+                        <!-- 已启用（整合包模式） -->
+                        <div class="col-md-4" id="enabledModsWrap">
+                            <h6 class="text-success"><i class="fas fa-check-circle me-1"></i>已启用 (<span id="enabledCount">0</span>)</h6>
+                            <div id="enabledModsList" class="mods-list"></div>
+                        </div>
+                        <!-- 未启用（整合包模式） -->
+                        <div class="col-md-4" id="disabledModsWrap">
+                            <h6 class="text-secondary"><i class="fas fa-minus-circle me-1"></i>未启用 (<span id="disabledCount">0</span>)</h6>
+                            <div id="disabledModsList" class="mods-list"></div>
+                        </div>
+                        <!-- 缺失 -->
+                        <div class="col-md-4" id="missingModsWrap">
+                            <h6 class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>缺失的模组 (<span id="missingCount">0</span>)</h6>
+                            <div id="missingModsList" class="mods-list"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模组版本号悬浮 Tooltip（自定义浮动框，非阻塞） -->
+    <div id="modTooltip" class="mod-tooltip" style="display:none;"></div>
+
+    <!-- 模组详情模态框（点击模组查看：订阅数 / 描述） -->
+    <div class="modal fade" id="modDetailModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-info-circle me-2 text-info"></i><span id="modDetailTitle">模组详情</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="modDetailBody"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 启动当前配置模态框（选版本直接启动） -->
+    <div class="modal fade" id="launchCurrentModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-play me-2 text-success"></i>启动游戏（当前配置）</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-secondary small mb-2">使用当前 enabled.json 直接启动，<strong>不做任何修改</strong>（不复制整合包配置）。请选择要启动的版本：</div>
+                    <div id="launchCurrentVersionList" class="list-group"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 当前 enabled.json 模组列表模态框 -->
+    <div class="modal fade" id="currentEnabledModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg" style="max-width:900px;">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-th-list me-2"></i>当前 enabled.json 模组</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="text-info mb-2" id="currentEnabledCount"></h6>
+                    <div id="currentEnabledList" class="mods-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 特殊加载项模态框 -->
+    <div class="modal fade" id="specialModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-sliders-h me-2" style="color:#8a5dff;"></i><span id="specialModalTitle">特殊加载项</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="specialPackId">
+                    <!-- 功能描述（按模式动态填充） -->
+                    <div id="specialModalDesc" class="alert border-0 mb-3" style="background:rgba(138,93,255,0.08); font-size:0.88rem; color:#c3b5ff;"></div>
+                    <!-- 开关 -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="specialActive">
+                        <label class="form-check-label fw-bold" for="specialActive" id="specialSwitchLabel">启用独立配置</label>
+                        <div class="form-text text-secondary" id="specialSwitchHint"></div>
+                    </div>
+                    <!-- 模组列表 -->
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold">本地 Mods 文件夹模组</span>
+                        <span id="specialCount" class="text-secondary small"></span>
+                    </div>
+                    <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
+                    <div id="specialModsList" class="special-mods-list"></div>
+                    <div id="specialEmpty" class="text-secondary mt-2" style="display:none;">Mods 目录未检测到 .tmod 文件</div>
+                    <!-- 模组元数据设置（仅全局设置模式显示） -->
+                    <div id="metaSettingsWrap" class="mt-3 pt-3 border-top" style="display:none; border-color:rgba(255,255,255,0.08) !important;">
+                        <h6 class="fw-bold"><i class="fas fa-cloud-download-alt me-1"></i>tModLoader 更新检测</h6>
+                        <div class="text-secondary small mb-2">从 GitHub Releases 检测 tModLoader 是否有新版本（需联网，失败时自动隐藏）</div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="tmodUpdateToggle">
+                            <label class="form-check-label fw-bold" for="tmodUpdateToggle">更新对比</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="tmodIgnorePreviewToggle">
+                            <label class="form-check-label fw-bold" for="tmodIgnorePreviewToggle">忽略 Preview 版（仅提示稳定版更新）</label>
+                        </div>
+                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                        <h6 class="fw-bold"><i class="fas fa-info-circle me-1"></i>模组元数据（本名 / 图标）</h6>
+                        <div class="text-secondary small mb-2">自动从 Steam 创意工坊获取模组本名与图标，结果缓存在本地。查不到 workshop ID 的模组只显示文件名。</div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showTagsToggle">
+                            <label class="form-check-label fw-bold" for="showTagsToggle">显示模组标签</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showStatsToggle">
+                            <label class="form-check-label fw-bold" for="showStatsToggle">在列表中显示统计数据</label>
+                            <div class="form-text text-secondary">勾选后，标签 / 更新 / 位置 / 统计等信息才直接在模组列表中显示；不勾选则仅在模组详情中显示。</div>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showHeatToggle">
+                            <label class="form-check-label fw-bold" for="showHeatToggle">显示热度（订阅 / 收藏 / 浏览）</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showSizeToggle">
+                            <label class="form-check-label fw-bold" for="showSizeToggle">显示模组大小</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showUpdateToggle">
+                            <label class="form-check-label fw-bold" for="showUpdateToggle">显示更新信息</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showSourceToggle">
+                            <label class="form-check-label fw-bold" for="showSourceToggle">显示位置检测（Workshop / 本地 / 整合包）</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" id="showCreatedToggle">
+                            <label class="form-check-label fw-bold" for="showCreatedToggle">显示模组创建时间</label>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-sm btn-outline-info neon-btn" onclick="refreshModMetaFrontend()"><i class="fas fa-sync me-1"></i>刷新模组元数据</button>
+                        </div>
+                        </div>
+                        <!-- Tooltip 信息设置 -->
+                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                            <h6 class="fw-bold"><i class="fas fa-comment-dots me-1"></i>Tooltip 信息设置</h6>
+                            <div class="text-secondary small mb-2">控制悬浮模组时浮动框里显示的信息。</div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipVersionToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipVersionToggle">显示版本号</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipNameToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipNameToggle">显示模组名（含 id）</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipTagsToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipTagsToggle">显示标签（紫色 chip）</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipHeatToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipHeatToggle">显示热度（🔥 订阅 / ⭐ 收藏 / 👁️ 浏览）</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipSizeToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipSizeToggle">显示大小（💾）</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="showTooltipCreatedToggle">
+                                <label class="form-check-label fw-bold" for="showTooltipCreatedToggle">显示创建时间（📅）</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" onclick="saveSpecial()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全局设置弹窗（分板块：左侧垂直导航切换；特殊加载弹窗保持原样不动） -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-cog me-2"></i>全局设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-layout">
+                        <!-- 左侧板块导航 -->
+                        <div class="settings-nav" id="settingsNav">
+                            <button type="button" class="settings-nav-item active" data-stab="update" title="tModLoader 更新检测开关"><i class="fas fa-sync me-2"></i>更新检测</button>
+                            <button type="button" class="settings-nav-item" data-stab="modlist" title="模组列表中直接展示的信息"><i class="fas fa-th-list me-2"></i>模组列表显示</button>
+                            <button type="button" class="settings-nav-item" data-stab="tooltip" title="悬浮模组时浮动框里显示的信息"><i class="fas fa-comment-dots me-2"></i>Tooltip 信息</button>
+                            <button type="button" class="settings-nav-item" data-stab="global" title="全局优先加载 workshop 模组（禁用本地同名模组）"><i class="fas fa-sliders-h me-2"></i>全局特殊配置</button>
+                        </div>
+                        <!-- 右侧板块内容 -->
+                        <div class="settings-body">
+                            <!-- 板块：更新检测 -->
+                            <div class="settings-pane" id="sp-update">
+                                <div class="settings-pane-title">🔄 tModLoader 更新检测</div>
+                                <div class="settings-pane-desc">从 GitHub Releases 检测 tModLoader 是否有新版本（需联网，失败时自动隐藏）。</div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_tmodUpdateToggle" data-mskey="tmod_update">
+                                    <label class="form-check-label fw-bold" for="s_tmodUpdateToggle">更新对比</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_tmodIgnorePreviewToggle" data-mskey="tmod_update_ignore_preview">
+                                    <label class="form-check-label fw-bold" for="s_tmodIgnorePreviewToggle">忽略 Preview 版（仅提示稳定版更新）</label>
+                                </div>
+                            </div>
+                            <!-- 板块：模组列表显示 -->
+                            <div class="settings-pane" id="sp-modlist" style="display:none;">
+                                <div class="settings-pane-title">📋 模组列表显示</div>
+                                <div class="settings-pane-desc">控制模组列表中直接展示的信息；不勾选「在列表中显示统计数据」时，标签 / 更新 / 位置 / 统计仅在模组详情中显示。</div>
+                                <!-- 总开关：置顶，控制整个「模组列表显示」配置 -->
+                                <div class="settings-master-toggle mb-3">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="s_showStatsToggle" data-mskey="show_stats">
+                                        <label class="form-check-label fw-bold" for="s_showStatsToggle">在列表中显示统计数据</label>
+                                    </div>
+                                </div>
+                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTagsToggle" data-mskey="show_tags">
+                                    <label class="form-check-label fw-bold" for="s_showTagsToggle">显示模组标签</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showHeatToggle" data-mskey="show_heat">
+                                    <label class="form-check-label fw-bold" for="s_showHeatToggle">显示热度（订阅 / 收藏 / 浏览）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showSizeToggle" data-mskey="show_size">
+                                    <label class="form-check-label fw-bold" for="s_showSizeToggle">显示模组大小</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showUpdateToggle" data-mskey="show_update">
+                                    <label class="form-check-label fw-bold" for="s_showUpdateToggle">显示更新信息</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showSourceToggle" data-mskey="show_source">
+                                    <label class="form-check-label fw-bold" for="s_showSourceToggle">显示位置检测（Workshop / 本地 / 整合包）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showCreatedToggle" data-mskey="show_created">
+                                    <label class="form-check-label fw-bold" for="s_showCreatedToggle">显示模组创建时间</label>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2 mt-2">
+                                    <button class="btn btn-sm btn-outline-info neon-btn" data-ms-refresh onclick="refreshModMetaFrontend()"><i class="fas fa-sync me-1"></i>刷新模组元数据</button>
+                                </div>
+                                </div>
+                            </div>
+                            <!-- 板块：Tooltip 信息 -->
+                            <div class="settings-pane" id="sp-tooltip" style="display:none;">
+                                <div class="settings-pane-title">💬 Tooltip 信息</div>
+                                <div class="settings-pane-desc">控制悬浮模组时浮动框里显示的信息。</div>
+                                <!-- 总开关：置顶，控制整个 Tooltip 的启用 / 禁用 -->
+                                <div class="settings-master-toggle mb-3">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipToggle" data-mskey="show_tooltip">
+                                        <label class="form-check-label fw-bold" for="s_showTooltipToggle">启用 Tooltip 悬浮提示</label>
+                                    </div>
+                                </div>
+                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipVersionToggle" data-mskey="show_tooltip_version">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipVersionToggle">显示版本号</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipNameToggle" data-mskey="show_tooltip_name">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipNameToggle">显示模组名（含 id）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipTagsToggle" data-mskey="show_tooltip_tags">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipTagsToggle">显示标签（紫色 chip）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipHeatToggle" data-mskey="show_tooltip_heat">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipHeatToggle">显示热度（🔥 订阅 / ⭐ 收藏 / 👁️ 浏览）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipSizeToggle" data-mskey="show_tooltip_size">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipSizeToggle">显示大小（💾）</label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipCreatedToggle" data-mskey="show_tooltip_created">
+                                    <label class="form-check-label fw-bold" for="s_showTooltipCreatedToggle">显示创建时间（📅）</label>
+                                </div>
+                                </div>
+                            </div>
+                            <!-- 板块：全局特殊配置（独立实现，不复用旧全局设置模板） -->
+                            <div class="settings-pane" id="sp-global" style="display:none;">
+                                <div class="settings-pane-title">⚙️ 全局特殊配置</div>
+                                <div class="settings-pane-desc">全局控制模组的优先加载：开启后，下方选中的本地模组会被禁用（<code>.tmod.disabled</code>，文件不删除），所有<strong>未启用独立配置</strong>的整合包在启动时都会应用此设置；启用独立配置的整合包使用各自配置，<strong>不受全局影响</strong>。退出 tModLoader 时自动还原。</div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_globalSpecialActive">
+                                    <label class="form-check-label fw-bold" for="s_globalSpecialActive">启用全局优先加载 workshop 模组</label>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-bold">本地 Mods 文件夹模组</span>
+                                    <span id="s_globalSpecialCount" class="text-secondary small"></span>
+                                </div>
+                                <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
+                                <div id="s_globalSpecialMods" class="special-mods-list"></div>
+                                <div id="s_globalSpecialEmpty" class="text-secondary mt-2" style="display:none;">Mods 目录未检测到 .tmod 文件</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" onclick="saveGlobalSpecial()"><i class="fas fa-save me-1"></i>保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用提示模态框（替代 alert） -->
+    <div class="modal fade" id="appAlertModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-info-circle me-2 text-primary"></i><span id="appAlertTitle">提示</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="appAlertMsg" class="mb-0" style="white-space:pre-wrap;"></p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-primary neon-btn" data-bs-dismiss="modal">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用确认模态框（替代 confirm） -->
+    <div class="modal fade" id="appConfirmModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-question-circle me-2 text-warning"></i><span id="appConfirmTitle">确认</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="appConfirmMsg" class="mb-0" style="white-space:pre-wrap;"></p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary neon-btn" id="appConfirmOkBtn">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 错误模态框 -->
+    <div class="modal fade" id="errorModal" tabindex="-1" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title text-danger"><i class="fas fa-exclamation-triangle me-2"></i>后端异常</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="errorMessage">后端服务异常，请确保程序正在运行。</p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/vendor/bootstrap.bundle.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

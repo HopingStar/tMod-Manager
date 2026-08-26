@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TModManager.Core\TModManager.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- 发布时把仓库根 wwwroot 一并带出（单文件模式 BaseDir=exe 目录，静态文件从 exe 旁 wwwroot 读） -->
+  <ItemGroup>
+    <Content Include="..\..\wwwroot\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- 构建/发布后删除未使用语言的卫星资源目录（cs/de/es/.../zh-Hant），保持输出目录干净。
+       这些目录由 .NET 为多语言资源预留、本项目用不到（当前为空）。用 MSBuild 原生 RemoveDir，无引号转义问题。 -->
+  <Target Name="RemoveUnusedSatelliteLangDirs" AfterTargets="Build;Publish">
+    <ItemGroup>
+      <_UnusedLang Include="cs;de;es;fr;it;ja;ko;pl;pt-BR;ru;tr;zh-Hans;zh-Hant" />
+    </ItemGroup>
+    <RemoveDir Directories="@(_UnusedLang -> '$(OutDir)%(Identity)')" />
+  </Target>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AssemblyName>tModManager</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- exe 文件图标：由 wwwroot/static/tmod_icon.dat（窗口图标）解密而来，与标题栏图标一致 -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- 发布时只复制 .pdb，排除 WebView2 等 NuGet 包的 XML 注释文档（省几百 KB） -->
+    <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+</Project>
