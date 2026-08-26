@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚡ tModLoader 整合包启动器</title>
+    <title>⚡ tModManager</title>
     <!-- 启动遮罩样式内联：不依赖外部 CSS/CDN，保证首帧立即显示加载动画 -->
     <style>
         #bootOverlay {
@@ -32,14 +32,14 @@
     <div id="bootOverlay">
         <div class="boot-box">
             <div class="boot-spinner"></div>
-            <div class="boot-text"><i class="fas fa-rocket me-1"></i>tModLoader 启动器加载中…</div>
+            <div class="boot-text"><i class="fas fa-rocket me-1"></i>tModManager 加载中…</div>
         </div>
     </div>
     <!-- 界面边框容器：整个窗口（含标题栏 + 内容区）统一边框，四周留 3px 背景板 -->
     <div id="appFrame">
     <!-- 自绘窗口标题栏（仅 pywebview 独立窗口显示；浏览器模式隐藏） -->
     <div id="winTitlebar" style="display:none;">
-        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModLoader 启动器 <span class="text-info small" id="appVersion" title="构建版本">v2.0.0</span></span>
+        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModManager <span class="text-info small" id="appVersion" title="构建版本">v2.0.0</span></span>
         <div class="win-controls">
             <button class="win-btn" id="winMinBtn" title="最小化"><i class="fas fa-minus"></i></button>
             <button class="win-btn" id="winMaxBtn" title="全屏 / 还原"><i class="fas fa-expand"></i></button>
@@ -51,7 +51,7 @@
         <!-- 主标题 -->
         <div class="text-center mb-3">
             <h1 class="display-4 fw-bold text-glow">
-                <i class="fas fa-rocket text-primary me-2"></i>tModLoader 启动器
+                <i class="fas fa-rocket text-primary me-2"></i>tModManager
             </h1>
             <p class="text-secondary">多版本 · 全局整合包 · 一键启动</p>
         </div>
@@ -59,12 +59,6 @@
         <!-- 状态栏 -->
         <div id="statusBar" class="glass-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between border-0" style="background: rgba(0,0,0,0.3) !important; border-radius: 15px;">
             <div class="d-flex align-items-center gap-4">
-                <!-- 后端状态 -->
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fw-bold">后端：</span>
-                    <span id="backendIndicator" class="status-dot" style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background-color: #6c757d;"></span>
-                    <span id="backendText" class="text-secondary">检测中...</span>
-                </div>
                 <!-- tModLoader 状态 -->
                 <div class="d-flex align-items-center gap-2">
                     <span class="fw-bold">tModLoader：</span>

@@ -277,7 +277,6 @@ async function fetchStatus() {
         const res = await fetch('/api/status');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        updateBackendStatus(true);
         updateTmodStatus(data.tmodloader_running);
         updateLastLaunch(data);
         missingVersionInfo = {};
@@ -287,7 +286,6 @@ async function fetchStatus() {
         updateMissingMarkers();
         backendErrorShown = false;
     } catch (e) {
-        updateBackendStatus(false);
         updateTmodStatus(false);
         document.getElementById('lastLaunchText').textContent = '无法连接后端';
         if (!backendErrorShown) {
@@ -311,21 +309,6 @@ function updateMissingMarkers() {
         el.textContent = name ? `${name} 整合包已被移动或删除` : '';
         el.style.display = name ? '' : 'none';
     });
-}
-
-function updateBackendStatus(ok) {
-    const dot = document.getElementById('backendIndicator');
-    const text = document.getElementById('backendText');
-    if (ok) {
-        dot.style.backgroundColor = '#28a745';
-        text.textContent = '正常';
-        text.style.color = '#28a745';
-    } else {
-        dot.style.backgroundColor = '#dc3545';
-        text.textContent = '异常';
-        text.style.color = '#dc3545';
-    }
-    dot.classList.remove('blink-green');
 }
 
 function updateTmodStatus(running) {
