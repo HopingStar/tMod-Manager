@@ -122,5 +122,3 @@ wwwroot/               前端（独立副本，直接服务）
 - **作者**：HopingStar
 - **项目主页**：https://github.com/HopingStar/tMod-Manager
 - **许可证**：MIT License（Copyright © 2026 HopingStar），详见 [`LICENSE`](LICENSE)
-
-如果这个工具帮到了你，欢迎在 GitHub 上点个 ⭐ 支持一下～
