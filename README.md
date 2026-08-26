@@ -3,6 +3,7 @@
 > 一个管理 **tModLoader 多版本启动**与**模组配置**的桌面启动器，为多版本玩家提供一站式管理。
 
 ![版本](https://img.shields.io/badge/版本-v2.0.0-blueviolet)
+![运行环境](https://img.shields.io/badge/运行环境-.NET%208-blue)
 ![许可证](https://img.shields.io/badge/License-MIT-green)
 
 深色界面的桌面小工具，基于 .NET 8 构建，支持多版本一键切换、整合包管理与 Steam Workshop 模组信息展示。所有数据**仅保存在本地**，不会上传任何信息。
