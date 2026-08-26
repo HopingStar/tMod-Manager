@@ -17,7 +17,7 @@
 
 ## 📥 下载与运行
 
-1. 到 **[GitHub Releases](https://github.com/HopingStar/tMod-Manager/releases)** 下载最新版 `tModManager-release.zip`
+1. 到 **[GitHub Releases](https://github.com/HopingStar/tMod-Manager/releases)** 下载最新版 **`tModManager-v2.0.0-portable-win-x64.zip`**（Windows 64 位 · 便携绿色版）
 2. 解压到任意目录，双击 `tModManager.exe` 即可运行（绿色版，免安装）
 3. 首次启动自动在程序目录生成配置文件
 
@@ -90,6 +90,8 @@ dotnet publish src/TModManager.App -c Release -r win-x64 --self-contained false
 ```
 
 把 `src/TModManager.App/bin/Release/net8.0-windows/win-x64/publish/` 整个文件夹压缩成 zip 分发即可（内容 = `tModManager.exe` + 依赖 dll + `wwwroot` + `runtimes`，必须整体一起分发）。
+
+发布包命名规范：**`tModManager-v{版本}-portable-win-x64.zip`**（便携版 · Windows · x64，各平台信息写入文件名）。
 
 ## 🏗️ 架构
 
