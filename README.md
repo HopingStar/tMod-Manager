@@ -7,6 +7,14 @@
 
 深色界面的桌面小工具，基于 .NET 8 构建，支持多版本一键切换、整合包管理与 Steam Workshop 模组信息展示。所有数据**仅保存在本地**，不会上传任何信息。
 
+## 🔄 与 Python 版的关系
+
+本仓库为 **C# 重构版**；早期版本基于 **Python（Flask + pywebview）**，现已**停更**，后续功能与维护全部在本仓库进行。
+
+- **数据完全独立**：两个版本各自使用独立的 `data.json` / `mod_meta.json`，互不复制、互不影响
+- **⚠️ 请勿同时运行两个版本**：它们共享同一个 tModLoader Mods 目录，同时运行会互相覆盖模组启用配置，导致加载状态错乱
+- **C# 版（本仓库）为唯一维护版本**，请优先使用本版本
+
 ## 📥 下载与运行
 
 1. 到 **[GitHub Releases](https://github.com/HopingStar/tMod-Manager/releases)** 下载最新版 `tModManager-release.zip`
