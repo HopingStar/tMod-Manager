@@ -139,4 +139,58 @@ public class ModsServiceTests
 
         Assert.Null(found);
     }
+
+    [Fact]
+    public async Task VersionMods_ConflictDetectedByInternalId_NotFilename()
+    {
+        using var tmp = new TestPaths();
+        // 本地：文件名带版本后缀，但内部 ID 是 FooMod；另有一个只在本地存在的 SoloMod
+        File.WriteAllBytes(Path.Combine(tmp.ModsDir, "FooMod_v1.2.3.tmod"), TmodHeader("FooMod"));
+        File.WriteAllBytes(Path.Combine(tmp.ModsDir, "SoloMod.tmod"), TmodHeader("SoloMod"));
+        // workshop：文件名 FooMod.tmod，内部 ID 也是 FooMod
+        var wsDir = Path.Combine(tmp.BaseDir, "steamapps", "workshop", "content", "1281930", "999");
+        Directory.CreateDirectory(wsDir);
+        File.WriteAllBytes(Path.Combine(wsDir, "FooMod.tmod"), TmodHeader("FooMod"));
+
+        var store = new JsonStore(tmp.AppPaths);
+        await store.WriteAsync(new AppData
+        {
+            Versions = new List<VersionEntry>
+            {
+                new() { Id = "v1", Name = "v1", BatPath = tmp.CreateBat(), ModsPath = tmp.ModsDir },
+            }
+        });
+        await File.WriteAllTextAsync(Path.Combine(tmp.ModsDir, "enabled.json"), "[\"FooMod\", \"SoloMod\"]");
+
+        var result = (await CreateMods(tmp).VersionModsAsync("v1")).Result;
+        Assert.NotNull(result);
+        var all = result!.Enabled.Concat(result.Disabled).ToList();
+        // 内部 ID 相同（FooMod）但文件名不同（FooMod.tmod / FooMod_v1.2.3.tmod）→ 两个条目都标记冲突
+        Assert.Contains(all, m => m.Name == "FooMod" && m.Conflict);
+        Assert.Contains(all, m => m.Name == "FooMod_v1.2.3" && m.Conflict);
+        // 只在本地存在 → 不冲突
+        Assert.Contains(all, m => m.Name == "SoloMod" && !m.Conflict);
+    }
+
+    /// <summary>构造一个只含文件头的最小 .tmod（供 ParseInternalName 读取内部 ID），不解压条目。</summary>
+    private static byte[] TmodHeader(string internalName)
+    {
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        bw.Write(0x444F4D54u);          // 'TMOD'
+        Write7(bw, "2024.0.0.0");       // tML 版本
+        bw.Write(new byte[20]);         // SHA1
+        bw.Write(new byte[256]);        // 签名
+        bw.Write(0u);                   // 数据长度
+        Write7(bw, internalName);       // 内部 ID
+        bw.Flush();
+        return ms.ToArray();
+    }
+
+    private static void Write7(BinaryWriter bw, string s)
+    {
+        var b = System.Text.Encoding.UTF8.GetBytes(s);
+        bw.Write7BitEncodedInt(b.Length);
+        bw.Write(b);
+    }
 }

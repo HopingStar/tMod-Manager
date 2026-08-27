@@ -514,6 +514,36 @@ public static class ApiEndpoints
             catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
         });
 
+        // 「以特殊加载配置启动」：应用全局特殊加载配置（禁用列表内本地模组、优先 workshop 版本）后启动该版本。
+        // 退出 tML 时自动还原全部 .tmod.disabled（TmlMonitorService.RestoreAllDisabled）。
+        api.MapPost("/versions/{versionId}/launch_special", async (string versionId, TmlProcessService procs, SpecialLoadService special, JsonStore store) =>
+        {
+            var data = await store.ReadAsync();
+            var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
+            if (version == null) return Results.Json(new { error = "版本不存在" }, statusCode: 404);
+            if (procs.IsRunning(true)) return Results.Json(new { error = "tModLoader 正在运行，无法启动新的实例" }, statusCode: 409);
+            if (!File.Exists(version.BatPath)) return Results.Json(new { error = "启动文件不存在" }, statusCode: 400);
+
+            var disabledSet = data.GlobalSpecial.Active
+                ? data.GlobalSpecial.Mods.Where(x => !string.IsNullOrEmpty(x)).ToHashSet(StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
+            try
+            {
+                var spErrors = special.ApplyDisabledSet(disabledSet);
+                TmlProcessService.LaunchBat(version.BatPath);
+                await store.UpdateAsync(d =>
+                {
+                    d.LastLaunch = new LastLaunch { VersionId = versionId, PackId = null, Disabled = disabledSet.ToList() };
+                    return true;
+                });
+                var message = $"已启动（{version.Name}），已应用全局特殊加载配置";
+                if (!data.GlobalSpecial.Active) message += "（全局特殊加载未开启，实际等价于直接启动）";
+                if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
+                return Results.Ok(new { message });
+            }
+            catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
+        });
+
         api.MapGet("/current_enabled", async (ModsService mods) =>
         {
             var names = await mods.ReadSharedEnabled();

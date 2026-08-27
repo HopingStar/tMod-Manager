@@ -371,16 +371,15 @@ textarea,
     white-space: nowrap;
 }
 
-/* 模组来源徽章（整合包 / 本地 / Workshop 组合标注） */
-.mod-src-badge {
-    display: block;
-    width: fit-content;
-    color: #8a5dff;
-    font-size: 0.7rem;
-    border: 1px solid rgba(138, 93, 255, 0.4);
+/* 设置里「仅版本模组列表可用」橙色 chip（换行显示，位于开关标签第二行） */
+.version-only-chip {
+    display: inline-block;
+    color: #ff9800;
+    font-size: 0.72rem;
+    border: 1px solid rgba(255, 152, 0, 0.4);
     border-radius: 8px;
-    padding: 0 6px;
-    margin-top: 3px;
+    padding: 1px 6px;
+    margin-top: 4px;
     white-space: nowrap;
 }
 
@@ -1031,4 +1030,79 @@ body[data-desktop="true"] #desktopShell {
 .about-value a:hover {
     color: #a5b4fc;
     text-decoration: underline;
+}
+
+/* ========== 顶部下拉 Toast 通知（向下淡入 / 5s 递减进度条 / 向上淡出） ========== */
+#toastContainer {
+    position: fixed;
+    top: 44px;               /* 位于自绘标题栏（36px）下方 */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: min(480px, 92vw);
+    pointer-events: none;
+}
+.toast-card {
+    width: 100%;
+    pointer-events: auto;
+    background: rgba(24, 28, 46, 0.97);
+    border: 1px solid rgba(99, 102, 241, 0.45);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    animation: toastIn 0.35s ease-out;
+}
+.toast-card.toast-leave {
+    animation: toastOut 0.3s ease-in forwards;
+}
+.toast-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px 10px;
+    color: #e8eaf6;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+.toast-ico {
+    color: #ffb74d;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+.toast-title {
+    font-weight: 700;
+    color: #a5b4fc;
+    flex-shrink: 0;
+}
+.toast-msg {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+.toast-track {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.toast-progress {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.75);   /* 紫色发光 */
+    transform-origin: left center;   /* 右边缘向左收缩 → 进度从右到左耗尽 */
+    animation: toastProgress 5s linear forwards;
+}
+@keyframes toastProgress {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+}
+@keyframes toastIn {
+    from { transform: translateY(-120%); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes toastOut {
+    to { transform: translateY(-120%); opacity: 0; }
 }

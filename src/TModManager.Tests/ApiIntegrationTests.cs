@@ -53,6 +53,11 @@ public class ApiIntegrationTests
             Assert.Equal(404, (int)(await client.PostAsync("/api/versions/nope/launch/PackX", null)).StatusCode);
             Assert.Equal(400, (int)(await client.PostAsync("/api/launch_current", null)).StatusCode);  // 无 last_launch
             Assert.Equal(404, (int)(await client.PostAsync("/api/versions/nope/launch_direct", null)).StatusCode);
+            // launch_special：路由必须存在且返回 JSON body（空 body 会在此抛 JsonException）
+            var sp = await client.PostAsync("/api/versions/nope/launch_special", null);
+            Assert.Equal(404, (int)sp.StatusCode);
+            using (var spDoc = JsonDocument.Parse(await sp.Content.ReadAsStringAsync()))
+                Assert.Equal("版本不存在", spDoc.RootElement.GetProperty("error").GetString());
             Assert.Equal(404, (int)(await client.PostAsync("/api/kill_tmodloader", null)).StatusCode);
 
             // ---- 加整合包（先建目录满足 PackExists）----

@@ -96,6 +96,26 @@ public static class TmodParser
         }
     }
 
+    /// <summary>只读 .tmod 文件头取内部 ID（模组名），不解压任何条目，极快。失败返回 null。</summary>
+    public static string? ParseInternalName(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            using var br = new BinaryReader(fs);
+            if (br.ReadUInt32() != TmodMagic) return null;
+            Read7Str(br);        // tML 版本
+            br.ReadBytes(20);    // SHA1
+            br.ReadBytes(256);   // 签名
+            br.ReadUInt32();     // 数据长度
+            return Read7Str(br); // 模组名（内部 ID）
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string Read7Str(BinaryReader br)
     {
         var n = br.Read7BitEncodedInt();

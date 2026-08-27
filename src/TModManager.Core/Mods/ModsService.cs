@@ -79,13 +79,16 @@ public sealed class ModsService
         var enabledSet = enabled.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var data = await _store.ReadAsync();
         var batPaths = GetVersionBatPaths(data, versionId, out var versionName);
-        var localNames = ListLocalMods().Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var localMods = ListLocalMods();
+        var localNames = localMods.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var ws = _workshop.Scan(batPaths);
         var wsNames = ws.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var packNames = Directory.EnumerateFiles(modsDir)
             .Where(f => f.EndsWith(".tmod", StringComparison.OrdinalIgnoreCase))
             .Select(Path.GetFileNameWithoutExtension)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // 冲突检测按「内部 ID」而非文件名
+        var (localInternal, wsInternal, fnameToInternal) = BuildInternalIdMaps(localMods, ws);
 
         var allSet = packNames.Union(localNames).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var enabledExist = enabledSet.Intersect(allSet).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
@@ -101,9 +104,9 @@ public sealed class ModsService
             Source = "folder",
             VersionId = versionId ?? "",
             VersionName = versionName,
-            Enabled = Build(enabledExist, localNames, wsNames, packNames, cache, idMap, now),
-            Disabled = Build(disabled, localNames, wsNames, packNames, cache, idMap, now),
-            Missing = Build(missing, localNames, wsNames, packNames, cache, idMap, now),
+            Enabled = Build(enabledExist, localNames, wsNames, packNames, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
+            Disabled = Build(disabled, localNames, wsNames, packNames, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
+            Missing = Build(missing, localNames, wsNames, packNames, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
         }, 200, "");
     }
 
@@ -123,7 +126,10 @@ public sealed class ModsService
         var batPaths = GetVersionBatPaths(data, versionId, out var versionName);
         var ws = _workshop.Scan(batPaths);
         var wsNames = ws.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var localNames = ListLocalMods().Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var localMods = ListLocalMods();
+        var localNames = localMods.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // 冲突检测按「内部 ID」而非文件名：同名模组文件名可能带版本后缀（如 FooMod_v1.2.3.tmod）
+        var (localInternal, wsInternal, fnameToInternal) = BuildInternalIdMaps(localMods, ws);
 
         var allSet = wsNames.Union(localNames).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var enabledExist = enabledSet.Intersect(allSet).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
@@ -140,9 +146,9 @@ public sealed class ModsService
             Source = "workshop",
             VersionId = versionId,
             VersionName = versionName,
-            Enabled = Build(enabledExist, localNames, wsNames, emptyPack, cache, idMap, now),
-            Disabled = Build(disabled, localNames, wsNames, emptyPack, cache, idMap, now),
-            Missing = Build(missing, localNames, wsNames, emptyPack, cache, idMap, now),
+            Enabled = Build(enabledExist, localNames, wsNames, emptyPack, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
+            Disabled = Build(disabled, localNames, wsNames, emptyPack, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
+            Missing = Build(missing, localNames, wsNames, emptyPack, localInternal, wsInternal, fnameToInternal, cache, idMap, now),
         }, 200, "");
     }
 
@@ -462,8 +468,34 @@ public sealed class ModsService
         return merged;
     }
 
+    /// <summary>构建「内部 ID」冲突检测数据：本地与 workshop 各自按内部 ID 归集 + 文件名→内部 ID 映射。
+    /// 比按文件名可靠：同名模组 .tmod 文件名可能带版本后缀。解析只读文件头（ParseInternalName），开销极小。</summary>
+    private (HashSet<string> LocalInternal, HashSet<string> WsInternal, Dictionary<string, string> FilenameToInternal)
+        BuildInternalIdMaps(List<LocalModInfo> localMods, Dictionary<string, WorkshopMod> ws)
+    {
+        var localInternal = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var wsInternal = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var lm in localMods)
+        {
+            var file = lm.Disabled ? lm.Name + ".tmod.disabled" : lm.Name + ".tmod";
+            var id = TmodParser.ParseInternalName(Path.Combine(_paths.DefaultModsPath, file)) ?? lm.Name;
+            localInternal.Add(id);
+            map[lm.Name] = id;
+        }
+        foreach (var kv in ws)
+        {
+            var id = TmodParser.ParseInternalName(kv.Value.Path) ?? kv.Key;
+            wsInternal.Add(id);
+            map.TryAdd(kv.Key, id);
+        }
+        return (localInternal, wsInternal, map);
+    }
+
     private List<ModEntry> Build(IEnumerable<string> names, HashSet<string> localNames, HashSet<string> wsNames,
-        HashSet<string> packNames, JsonObject cache, Dictionary<string, string> idMap, double nowTs)
+        HashSet<string> packNames, HashSet<string> localInternal, HashSet<string> wsInternal,
+        Dictionary<string, string> fnameToInternal, JsonObject cache, Dictionary<string, string> idMap, double nowTs)
     {
         var meta = cache["meta"] as JsonObject ?? new JsonObject();
         var result = new List<ModEntry>();
@@ -474,13 +506,15 @@ public sealed class ModsService
             if (!string.IsNullOrEmpty(pid)) sm = meta[pid];
             var steamUpdated = GetLong(sm?["time_updated"]);
             int? updDays = steamUpdated > 0 ? (int)((nowTs - steamUpdated) / 86400) : null;
+            // 冲突：按内部 ID 判断「本地 + Workshop 同时存在」（文件名可能带版本后缀，不可靠）
+            var nid = fnameToInternal.GetValueOrDefault(n) ?? n;
             result.Add(new ModEntry
             {
                 Name = n,
                 HasLocal = localNames.Contains(n),
                 HasWorkshop = wsNames.Contains(n),
                 InPack = packNames.Contains(n),
-                Conflict = localNames.Contains(n) && wsNames.Contains(n),
+                Conflict = localInternal.Contains(nid) && wsInternal.Contains(nid),
                 UpdateDaysAgo = updDays,
                 Tags = (sm?["tags"] as JsonArray)?.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0).ToList() ?? new(),
                 Description = sm?["description"]?.ToString() ?? "",

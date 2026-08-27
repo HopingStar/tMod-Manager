@@ -12,6 +12,7 @@ let errorModalInstance = null;
 let currentView = 'versions';  // 'versions' | 'packs'
 let specialStatus = { global_active: false, packs: {} };  // 特殊加载状态
 let specialSelection = new Set();  // 特殊加载弹窗中选中的模组
+let specialTotal = 0;              // 特殊加载弹窗中本地 Mods 模组总数
 let specialMode = 'pack';  // 'pack' = 整合包独立配置 | 'global' = 全局设置
 let modMeta = { mods: [], needs_refresh: false };  // 模组元数据（本名/图标）
 let modMetaRefreshing = false;
@@ -32,7 +33,7 @@ let showStats = true;
 let showHeat = true;
 let showSize = true;
 let showUpdate = true;
-let showSource = true;   // 模组列表：来源 chip（整合包/本地/Workshop）显示
+let showSource = true;   // 版本模组列表：本地 + Workshop 同时存在标记（橙色 chip）显示
 let showCreated = true;  // 模组列表：模组创建时间显示
 // Tooltip 信息设置（悬浮模组时浮动框显示的内容）
 let showTooltip = true;          // Tooltip 总开关（全局设置置顶，关闭则完全不显示悬浮框）
@@ -204,6 +205,34 @@ function showAppAlert(message, title = '提示') {
         backdrop: true, keyboard: true
     });
     _appAlertModal.show();
+}
+
+// 顶部下拉 Toast：向下淡入，5s 递减进度条（从右到左耗尽）结束后向上淡出。
+// 用于启动成功 / 设置已应用等轻量成功提示；错误仍走 showAppAlert 弹窗。
+function showToast(message, title = '提示') {
+    const container = document.getElementById('toastContainer');
+    if (!container) { showAppAlert(message, title); return; }
+    const card = document.createElement('div');
+    card.className = 'toast-card';
+    card.innerHTML = `<div class="toast-body">
+        <i class="fas fa-info-circle toast-ico"></i>
+        <span class="toast-title">${escapeHtml(title)}</span>
+        <span class="toast-msg">${escapeHtml(message || '')}</span>
+    </div>
+    <div class="toast-track"><div class="toast-progress"></div></div>`;
+    container.appendChild(card);
+    // 进度条动画用 @keyframes 显式从 scaleX(1)→scaleX(0)，与 rAF/帧时序无关，
+    // 不会因并发动画抢帧导致进度条直接跳到消失态。
+    // 5s 后向上淡出并移除：仅响应卡片自身的 toastOut 动画结束（过滤子元素进度条 animationend 冒泡）
+    setTimeout(() => {
+        card.classList.add('toast-leave');
+        const onToastOut = (e) => {
+            if (e.target !== card) return;
+            card.remove();
+            card.removeEventListener('animationend', onToastOut);
+        };
+        card.addEventListener('animationend', onToastOut);
+    }, 5000);
 }
 
 function showAppConfirm(message, onConfirm, title = '确认') {
@@ -395,7 +424,7 @@ function renderVersions() {
         <div class="card glass-card mb-4 border-0 version-card" data-version="${v.id}">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
                 <div><i class="fas fa-folder-open text-warning me-2"></i><strong>${escapeHtml(label)}</strong>${updateBadge}</div>
-                <div>
+                <div class="d-flex align-items-center">
                     <button class="btn btn-sm btn-success me-1" data-action="launchDirect" data-version="${v.id}" title="直接启动：使用当前 Mods 目录的 enabled.json 启动该版本，不做任何修改（不覆盖 enabled.json）">
                         <i class="fas fa-play me-1"></i>直接启动
                     </button>
@@ -404,12 +433,6 @@ function renderVersions() {
                     </button>
                     <button class="fav-btn me-1" data-action="toggleFavVersion" data-version="${v.id}" title="收藏 / 取消收藏">
                         <i class="${starIcon}"></i>
-                    </button>
-                    <button class="icon-btn me-1" data-action="editVersion" data-version="${v.id}" title="编辑名称 / 版本号">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger me-1" data-action="deleteVersion" data-version="${v.id}">
-                        <i class="fas fa-trash-alt"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-warning restore-btn" data-action="restoreVersion" data-version="${v.id}">
                         <i class="fas fa-undo-alt"></i> 还原
@@ -739,7 +762,8 @@ async function openSpecial(packId) {
         const data = await res.json();
         if (!res.ok) { alert('获取失败: ' + data.error); return; }
         document.getElementById('specialActive').checked = data.independent;
-        specialSelection = new Set(data.disabled_mods || []);
+        const pLocal = new Set((data.mods || []).map(m => m.name));
+        specialSelection = new Set((data.disabled_mods || []).filter(n => pLocal.has(n)));
         renderSpecialMods(data.mods);
         updateSpecialListState();
     } catch (e) { alert('请求失败: ' + e.message); }
@@ -767,7 +791,8 @@ async function openGlobalSpecial() {
         const data = await res.json();
         if (!res.ok) { alert('获取失败: ' + data.error); return; }
         document.getElementById('specialActive').checked = data.active;
-        specialSelection = new Set(data.disabled_mods || []);
+        const gLocal = new Set((data.mods || []).map(m => m.name));
+        specialSelection = new Set((data.disabled_mods || []).filter(n => gLocal.has(n)));
         renderSpecialMods(data.mods);
         updateSpecialListState();
     } catch (e) { alert('请求失败: ' + e.message); }
@@ -808,6 +833,7 @@ function switchSettingsPane(tab) {
 // ---------- 全局特殊配置板块（独立实现于设置弹窗，不复用旧 specialModal 模板） ----------
 let globalSpecialSelection = new Set();
 let globalSpecialLoaded = false;
+let globalSpecialTotal = 0;   // 本地 Mods 模组总数
 
 // 加载全局特殊加载配置并渲染模组列表
 async function loadGlobalSpecialPane() {
@@ -818,7 +844,9 @@ async function loadGlobalSpecialPane() {
         const data = await res.json();
         if (!res.ok) { alert('获取失败: ' + data.error); return; }
         document.getElementById('s_globalSpecialActive').checked = data.active;
-        globalSpecialSelection = new Set(data.disabled_mods || []);
+        // 过滤掉已选列表里本地不存在的幽灵条目（旧 workshop ID / 已删除模组），避免已选计数 +1；保存时会一并清理
+        const localNames = new Set((data.mods || []).map(m => m.name));
+        globalSpecialSelection = new Set((data.disabled_mods || []).filter(n => localNames.has(n)));
         renderGlobalSpecialMods(data.mods);
         updateGlobalSpecialState();
     } catch (e) { alert('请求失败: ' + e.message); }
@@ -827,7 +855,8 @@ async function loadGlobalSpecialPane() {
 function renderGlobalSpecialMods(mods) {
     const container = document.getElementById('s_globalSpecialMods');
     document.getElementById('s_globalSpecialEmpty').style.display = (!mods || mods.length === 0) ? '' : 'none';
-    if (!mods || mods.length === 0) { container.innerHTML = ''; updateGlobalSpecialCount(0); return; }
+    globalSpecialTotal = mods ? mods.length : 0;
+    if (!mods || mods.length === 0) { container.innerHTML = ''; updateGlobalSpecialCount(); return; }
     let html = '';
     for (const m of mods) {
         const selected = globalSpecialSelection.has(m.name);
@@ -838,7 +867,7 @@ function renderGlobalSpecialMods(mods) {
         </div>`;
     }
     container.innerHTML = html;
-    updateGlobalSpecialCount(mods.length);
+    updateGlobalSpecialCount();
 }
 
 function toggleGlobalSpecialMod(el) {
@@ -854,11 +883,10 @@ function toggleGlobalSpecialMod(el) {
     updateGlobalSpecialCount();
 }
 
-function updateGlobalSpecialCount(total) {
+function updateGlobalSpecialCount() {
     const el = document.getElementById('s_globalSpecialCount');
     if (!el) return;
-    if (typeof total === 'number') el.textContent = `共 ${total} 个模组`;
-    else el.textContent = `已选 ${globalSpecialSelection.size} 个`;
+    el.textContent = `共 ${globalSpecialTotal} 个模组 · 已选 ${globalSpecialSelection.size} 个`;
 }
 
 function updateGlobalSpecialState() {
@@ -889,7 +917,7 @@ async function saveGlobalSpecial() {
             const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
             if (modal) modal.hide();
             if (data.errors && data.errors.length) alert(data.message);
-            else alert('已保存');
+            else showToast('全局特殊配置已保存', '设置已应用');
         } else {
             alert('保存失败: ' + data.error);
         }
@@ -950,9 +978,10 @@ function openAboutGithub() {
 function renderSpecialMods(mods) {
     const container = document.getElementById('specialModsList');
     document.getElementById('specialEmpty').style.display = (!mods || mods.length === 0) ? '' : 'none';
+    specialTotal = mods ? mods.length : 0;
     if (!mods || mods.length === 0) {
         container.innerHTML = '';
-        updateSpecialCount(0);
+        updateSpecialCount();
         return;
     }
     let html = '';
@@ -965,7 +994,7 @@ function renderSpecialMods(mods) {
         </div>`;
     }
     container.innerHTML = html;
-    updateSpecialCount(mods.length);
+    updateSpecialCount();
 }
 
 function toggleSpecialMod(el) {
@@ -981,10 +1010,9 @@ function toggleSpecialMod(el) {
     updateSpecialCount();
 }
 
-function updateSpecialCount(total) {
+function updateSpecialCount() {
     const el = document.getElementById('specialCount');
-    if (typeof total === 'number') el.textContent = `共 ${total} 个模组`;
-    else el.textContent = `已选 ${specialSelection.size} 个`;
+    el.textContent = `共 ${specialTotal} 个模组 · 已选 ${specialSelection.size} 个`;
 }
 
 function updateSpecialListState() {
@@ -1016,6 +1044,7 @@ async function saveSpecial() {
             hideModal('specialModal');
             loadData();  // 刷新卡片按钮紫色状态
             if (data.errors && data.errors.length) alert(data.message);
+            else showToast(specialMode === 'global' ? '全局特殊配置已保存' : '整合包特殊加载配置已保存', '设置已应用');
         } else {
             alert('保存失败: ' + data.error);
         }
@@ -1369,13 +1398,17 @@ function renderPackModsData(data) {
     }
 }
 
-// 更新检测源提示（橙色加粗）：版本=Workshop+本地，整合包=整合包文件夹+本地
+// 更新检测源提示（橙色加粗）：仅版本列表显示（整合包是打包分发用，不做来源检测）
 function updatePackModsSourceUI() {
-    const text = document.getElementById('packModsSourceText');
-    if (!text) return;
-    text.textContent = (currentModsMode === 'version')
-        ? '检测源：Workshop + 本地'
-        : '检测源：整合包文件夹 + 本地';
+    const row = document.getElementById('packModsSourceRow');
+    if (!row) return;
+    if (currentModsMode === 'version') {
+        row.style.display = '';
+        const text = document.getElementById('packModsSourceText');
+        if (text) text.textContent = '检测源：Workshop + 本地';
+    } else {
+        row.style.display = 'none';   // 整合包列表不显示检测源
+    }
 }
 
 // ========== 模组列表弹窗工具栏（启用/禁用切换 + Tooltip 开关） ==========
@@ -1457,12 +1490,9 @@ function renderModsList(elId, mods, type, doFilter = false, emptyOverride) {
         const d = modDisplay(name);
         // 列表内信息统一以「在列表中显示统计数据」(showStats) 为总开关：
         // 需同时勾选 showStats 与对应细分开关，才在列表中显示；否则仅在模组详情弹窗显示。
-        // 来源徽章：整合包文件夹 / 本地 Mods / Workshop（组合标注）
-        const _src = [];
-        if (m.in_pack) _src.push('整合包');
-        if (m.has_local) _src.push('本地');
-        if (m.has_workshop) _src.push('Workshop');
-        const srcBadge = (showStats && showSource && _src.length) ? `<div class="mod-src-badge">${_src.join('+')}</div>` : '';
+        // 同时存在标记（仅版本模组列表可用）：Workshop 与本地都有同名模组 → 橙色 chip
+        const conflictBadge = (currentModsMode === 'version' && showStats && showSource && m.conflict)
+            ? `<div class="mod-conflict-badge">本地 + Workshop</div>` : '';
         // 更新（蓝色）：Steam 最近一次更新距今天数（不对比本地文件）
         const updBadge = (showStats && showUpdate && m.update_days_ago != null) ? `<div class="mod-update-badge">🔄 更新于 ${fmtDaysAgo(m.update_days_ago)}</div>` : '';
         // 标签（紫色，独立一行）
@@ -1499,7 +1529,7 @@ function renderModsList(elId, mods, type, doFilter = false, emptyOverride) {
                 ${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" onerror="this.style.display='none'" alt="">` : `<i class="fas fa-cube me-1"></i>`}
                 <div class="mod-item-text">
                     <div class="mod-item-label">${d.labelHtml}</div>
-                    ${srcBadge}
+                    ${conflictBadge}
                     ${updBadge}
                     ${tagsHtml}
                     ${statsHtml}
@@ -1745,7 +1775,7 @@ function initUpdateToggle() {
     });
 }
 
-// 位置检测（来源 chip）显示开关
+// 同时存在标记（仅版本模组列表）显示开关
 function initSourceToggle() {
     const t = document.getElementById('showSourceToggle');
     if (!t) return;
@@ -2040,10 +2070,27 @@ async function launchDirect(versionId) {
         const res = await fetch(`/api/versions/${encodeURIComponent(versionId)}/launch_direct`, { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-            showAppAlert(data.message, '启动成功');
+            showToast(data.message, '启动成功');
             fetchStatus();
         } else {
             showAppAlert(data.error || '启动失败', '无法启动');
+        }
+    } catch (e) {
+        showAppAlert('请求失败: ' + e.message, '无法启动');
+    }
+}
+
+// 「以特殊加载配置启动」：应用全局特殊加载配置后启动该版本（禁用列表内本地模组，退出自动还原）
+async function launchSpecial(versionId) {
+    try {
+        const res = await fetch(`/api/versions/${encodeURIComponent(versionId)}/launch_special`, { method: 'POST' });
+        let data = {};
+        try { data = await res.json(); } catch { /* 空 body / 非 JSON：用 HTTP 状态兜底 */ }
+        if (res.ok) {
+            showToast(data.message || '启动成功', '启动成功');
+            fetchStatus();
+        } else {
+            showAppAlert(data.error || ('启动失败（HTTP ' + res.status + '）'), '无法启动');
         }
     } catch (e) {
         showAppAlert('请求失败: ' + e.message, '无法启动');
@@ -2057,7 +2104,7 @@ async function launchCurrentNow() {
         const res = await fetch('/api/launch_current', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-            showAppAlert(data.message, '启动成功');
+            showToast(data.message, '启动成功');
             fetchStatus();
         } else {
             showAppAlert(data.error || '启动失败', '无法启动');
@@ -2226,7 +2273,7 @@ async function launchPack(versionId, packId) {
             const res = await fetch(`/api/versions/${versionId}/launch/${packId}`, { method: 'POST' });
             const data = await res.json();
             if (res.ok) {
-                showAppAlert(data.message);
+                showToast(data.message, '启动成功');
                 // 刷新状态以更新运行中标志
                 fetchStatus();
             } else {
@@ -2332,10 +2379,14 @@ function showContextMenu(items, x, y) {
     ctxMenuEl.style.top = Math.max(4, Math.min(y, window.innerHeight - r.height - 8)) + 'px';
 }
 
-// ---- 版本卡片菜单 ----
+// ---- 版本卡片菜单（编辑功能已整合进右键菜单；「以特殊加载配置启动」置顶） ----
 function showVersionMenu(versionId, x, y) {
     showContextMenu([
+        { action: 'launchSpecial', label: '以「特殊加载配置」启动', icon: '<i class="fas fa-play me-2 text-success"></i>' },
+        { sep: true },
         { action: 'openFolder', label: '打开当前版本文件夹', icon: '<i class="fas fa-folder-open me-2 text-warning"></i>' },
+        { action: 'editVersion', label: '编辑版本', icon: '<i class="fas fa-pen me-2"></i>' },
+        { action: 'deleteVersion', label: '删除版本', icon: '<i class="fas fa-trash-alt me-2 text-danger"></i>' },
     ], x, y);
     ctxData = { kind: 'version', versionId };
 }
@@ -2409,7 +2460,10 @@ function openModSteamPage(name) {
 function handleCtxAction(action) {
     if (!ctxData) return;
     if (ctxData.kind === 'version') {
-        if (action === 'openFolder') openVersionFolder();
+        if (action === 'launchSpecial') launchSpecial(ctxData.versionId);
+        else if (action === 'openFolder') openVersionFolder();
+        else if (action === 'editVersion') openVersionEdit(ctxData.versionId);
+        else if (action === 'deleteVersion') deleteVersion(ctxData.versionId);
     } else if (ctxData.kind === 'mod') {
         if (action === 'openModFolder') openModFolder(ctxData.name, ctxData.packId, ctxData.versionId);
         else if (action === 'openSteamPage') openModSteamPage(ctxData.name);

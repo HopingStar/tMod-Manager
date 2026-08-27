@@ -39,7 +39,7 @@
     <div id="appFrame">
     <!-- 自绘窗口标题栏（仅 pywebview 独立窗口显示；浏览器模式隐藏） -->
     <div id="winTitlebar" style="display:none;">
-        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModManager <span class="text-info small" id="appVersion" title="构建版本">v2.0.0</span></span>
+        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModManager <span class="text-info small" id="appVersion" title="构建版本">v2.1.0</span></span>
         <div class="win-controls">
             <button class="win-btn" id="winMinBtn" title="最小化"><i class="fas fa-minus"></i></button>
             <button class="win-btn" id="winMaxBtn" title="全屏 / 还原"><i class="fas fa-expand"></i></button>
@@ -257,7 +257,7 @@
                     <h6 id="packModsTitle" class="text-info mb-2"></h6>
                     <!-- 检测源提示（橙色加粗） -->
                     <div class="d-flex align-items-center mb-3" id="packModsSourceRow">
-                        <span class="fw-bold" style="color:#ff9800; font-size:0.95rem;"><i class="fas fa-map-marker-alt me-1"></i><span id="packModsSourceText">检测源：Workshop + 本地</span></span>
+                        <span class="fw-bold" style="color:#ff9800; font-size:0.95rem;"><span id="packModsSourceText">检测源：Workshop + 本地</span></span>
                     </div>
                     <!-- 搜索 + 标签筛选 -->
                     <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
@@ -409,7 +409,7 @@
                         <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" role="switch" id="showStatsToggle">
                             <label class="form-check-label fw-bold" for="showStatsToggle">在列表中显示统计数据</label>
-                            <div class="form-text text-secondary">勾选后，标签 / 更新 / 位置 / 统计等信息才直接在模组列表中显示；不勾选则仅在模组详情中显示。</div>
+                            <div class="form-text text-secondary">勾选后，标签 / 更新 / 同时存在标记 / 统计等信息才直接在模组列表中显示；不勾选则仅在模组详情中显示。</div>
                         </div>
                         <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" role="switch" id="showHeatToggle">
@@ -425,7 +425,7 @@
                         </div>
                         <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" role="switch" id="showSourceToggle">
-                            <label class="form-check-label fw-bold" for="showSourceToggle">显示位置检测（Workshop / 本地 / 整合包）</label>
+                            <label class="form-check-label fw-bold" for="showSourceToggle">显示「本地 + Workshop 同时存在」标记<br><span class="version-only-chip">仅版本模组列表可用</span></label>
                         </div>
                         <div class="form-check form-switch mb-2">
                             <input class="form-check-input" type="checkbox" role="switch" id="showCreatedToggle">
@@ -510,7 +510,7 @@
                             <!-- 板块：模组列表显示 -->
                             <div class="settings-pane" id="sp-modlist" style="display:none;">
                                 <div class="settings-pane-title">📋 模组列表显示</div>
-                                <div class="settings-pane-desc">控制模组列表中直接展示的信息；不勾选「在列表中显示统计数据」时，标签 / 更新 / 位置 / 统计仅在模组详情中显示。</div>
+                                <div class="settings-pane-desc">控制模组列表中直接展示的信息；不勾选「在列表中显示统计数据」时，标签 / 更新 / 同时存在标记 / 统计仅在模组详情中显示。</div>
                                 <!-- 总开关：置顶，控制整个「模组列表显示」配置 -->
                                 <div class="settings-master-toggle mb-3">
                                     <div class="form-check form-switch mb-0">
@@ -537,7 +537,7 @@
                                 </div>
                                 <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" role="switch" id="s_showSourceToggle" data-mskey="show_source">
-                                    <label class="form-check-label fw-bold" for="s_showSourceToggle">显示位置检测（Workshop / 本地 / 整合包）</label>
+                                    <label class="form-check-label fw-bold" for="s_showSourceToggle">显示「本地 + Workshop 同时存在」标记<br><span class="version-only-chip">仅版本模组列表可用</span></label>
                                 </div>
                                 <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" role="switch" id="s_showCreatedToggle" data-mskey="show_created">
@@ -687,6 +687,9 @@
             </div>
         </div>
     </div>
+
+    <!-- 顶部下拉 Toast 通知容器（启动成功 / 设置已应用等） -->
+    <div id="toastContainer" aria-live="polite"></div>
 
     <script src="/static/vendor/bootstrap.bundle.min.js"></script>
     <script src="/static/script.js"></script>
