@@ -63,8 +63,8 @@ public static class TmodParser
 
             if ((iconBytes is null or { Length: 0 }) && infoBytes is null) return null;
 
-            // Info：7-bit 键值对，取 displayName / author / version
-            string displayName = "", author = "", infoVersion = "";
+            // Info：7-bit 键值对，取 displayName / author / version / description
+            string displayName = "", author = "", infoVersion = "", infoDescription = "";
             if (infoBytes is { Length: > 0 })
             {
                 var pos = 0;
@@ -77,6 +77,7 @@ public static class TmodParser
                     if (k == "displayName") displayName = v;
                     else if (k == "author") author = v;
                     else if (k == "version") infoVersion = v;
+                    else if (k == "description") infoDescription = v;
                 }
             }
 
@@ -87,6 +88,7 @@ public static class TmodParser
                 DisplayName = displayName,
                 Author = author,
                 Version = string.IsNullOrEmpty(infoVersion) ? modVersion : infoVersion,
+                Description = infoDescription,
                 IconBytes = iconBytes,
             };
         }

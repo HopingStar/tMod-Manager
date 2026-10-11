@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-bs-theme="dark">
+<html lang="zh-CN" data-bs-theme="dark" class="bg-glow-on">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,6 +12,26 @@
             display: flex; align-items: center; justify-content: center;
         }
         .boot-box { text-align: center; }
+        /* logo：本程序图标（tmod_icon.dat 解密而来），淡入 + 之后持续轻微呼吸辉光 */
+        .boot-logo {
+            width: 72px; height: 72px; margin: 0 auto 16px;
+            display: flex; align-items: center; justify-content: center;
+            animation: bootLogoIn 0.7s ease-out, bootLogoPulse 2.4s ease-in-out 0.7s infinite;
+        }
+        .boot-logo img {
+            width: 72px; height: 72px;
+            object-fit: contain;
+            border-radius: 18px;
+            -webkit-user-drag: none; user-select: none; pointer-events: none;
+        }
+        @keyframes bootLogoIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.9); }
+            to   { opacity: 1; transform: none; }
+        }
+        @keyframes bootLogoPulse {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(13, 110, 253, 0.45)); }
+            50%      { filter: drop-shadow(0 0 22px rgba(13, 110, 253, 0.85)); }
+        }
         .boot-spinner {
             width: 46px; height: 46px; margin: 0 auto 18px;
             border: 4px solid rgba(255, 255, 255, 0.12);
@@ -20,7 +40,7 @@
             animation: bootSpin 0.85s linear infinite;
         }
         @keyframes bootSpin { to { transform: rotate(360deg); } }
-        .boot-text { color: #9db0c8; font-size: 0.9rem; letter-spacing: 0.5px; }
+        .boot-text { color: #9db0c8; font-size: 0.9rem; letter-spacing: 0.5px; transition: opacity 0.22s ease; }
     </style>
     <!-- 本地资源（已从 CDN 下载到 static/vendor，避免首次加载的网络延迟/图标延迟） -->
     <link href="/static/vendor/bootstrap.min.css" rel="stylesheet">
@@ -31,8 +51,9 @@
     <!-- 启动加载遮罩：数据就绪后淡出 -->
     <div id="bootOverlay">
         <div class="boot-box">
+            <div class="boot-logo"><img src="/static/app_icon.png" alt="" draggable="false"></div>
             <div class="boot-spinner"></div>
-            <div class="boot-text"><i class="fas fa-rocket me-1"></i>tModManager 加载中…</div>
+            <div class="boot-text" id="bootText">正在读取版本…</div>
         </div>
     </div>
     <!-- 界面边框容器：整个窗口（含标题栏 + 内容区）统一边框，四周留 3px 背景板 -->
@@ -243,11 +264,12 @@
 
     <!-- 整合包模组列表模态框 -->
     <div class="modal fade" id="packModsModal" tabindex="-1" data-bs-theme="dark">
-        <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width:1200px;">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
-                    <h5 class="modal-title"><i class="fas fa-th-list me-2"></i>整合包模组</h5>
+                    <h5 class="modal-title"><i class="fas fa-th-list me-2"></i><span id="packModsKindTitle">整合包模组</span></h5>
                     <div class="d-flex align-items-center gap-2">
+                        <span id="modMetaRefreshProgress" class="meta-refresh-progress" style="display:none;"></span>
                         <button class="btn btn-sm btn-outline-info neon-btn" id="modMetaRefreshBtn" onclick="refreshModMetaFromMods()"><i class="fas fa-sync me-1"></i>刷新模组元数据</button>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
@@ -276,28 +298,13 @@
                             </div>
                         </div>
                         <!-- 工具栏：启用/禁用切换（仅版本模式的合并列表）。Tooltip 开关已移至全局设置 -->
-                        <button class="btn btn-sm btn-outline-info neon-btn" id="modsMergedBtn" onclick="cycleMergedFilter()" title="切换显示已启用 / 未启用模组（不影响缺失列）" style="display:none;"><i class="fas fa-layer-group me-1"></i>全部</button>
+                        <button class="btn btn-sm btn-outline-info neon-btn" id="modsMergedBtn" onclick="cycleMergedFilter()" title="切换显示：全部 / 已启用 / 未启用 / 缺失" style="display:none;"><i class="fas fa-layer-group me-1"></i>全部</button>
                     </div>
                     <div class="row g-3">
-                        <!-- 合并列（版本模式）：绿色=已启用上移，灰色=未启用下移 -->
-                        <div class="col-md-6" id="mergedModsWrap" style="display:none;">
-                            <h6><i class="fas fa-layer-group me-1"></i>模组 <span id="mergedCount" class="text-success small">0</span> <span id="mergedHint" class="text-secondary small">（绿色=已启用 / 灰色=未启用）</span></h6>
+                        <!-- 单列：启用（绿）→ 未启用（灰）→ 缺失（红）自上而下；列内滚动 -->
+                        <div class="col-12" id="mergedModsWrap">
+                            <h6><i class="fas fa-layer-group me-1"></i>模组 <span id="mergedCount" class="text-success small">0</span> <span id="mergedHint" class="text-secondary small">（绿=已启用 / 灰=未启用 / 红=缺失，自上而下）</span><span id="mergedHidden" class="text-warning small"></span></h6>
                             <div id="mergedModsList" class="mods-list"></div>
-                        </div>
-                        <!-- 已启用（整合包模式） -->
-                        <div class="col-md-4" id="enabledModsWrap">
-                            <h6 class="text-success"><i class="fas fa-check-circle me-1"></i>已启用 (<span id="enabledCount">0</span>)</h6>
-                            <div id="enabledModsList" class="mods-list"></div>
-                        </div>
-                        <!-- 未启用（整合包模式） -->
-                        <div class="col-md-4" id="disabledModsWrap">
-                            <h6 class="text-secondary"><i class="fas fa-minus-circle me-1"></i>未启用 (<span id="disabledCount">0</span>)</h6>
-                            <div id="disabledModsList" class="mods-list"></div>
-                        </div>
-                        <!-- 缺失 -->
-                        <div class="col-md-4" id="missingModsWrap">
-                            <h6 class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>缺失的模组 (<span id="missingCount">0</span>)</h6>
-                            <div id="missingModsList" class="mods-list"></div>
                         </div>
                     </div>
                 </div>
@@ -386,7 +393,7 @@
                     </div>
                     <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
                     <div id="specialModsList" class="special-mods-list"></div>
-                    <div id="specialEmpty" class="text-secondary mt-2" style="display:none;">Mods 目录未检测到 .tmod 文件</div>
+                    <div id="specialEmpty" class="empty-inline mt-2" style="display:none;"><i class="fas fa-inbox"></i><span>Mods 目录未检测到 .tmod 文件</span></div>
                     <!-- 模组元数据设置（仅全局设置模式显示） -->
                     <div id="metaSettingsWrap" class="mt-3 pt-3 border-top" style="display:none; border-color:rgba(255,255,255,0.08) !important;">
                         <h6 class="fw-bold"><i class="fas fa-cloud-download-alt me-1"></i>tModLoader 更新检测</h6>
@@ -490,6 +497,7 @@
                             <button type="button" class="settings-nav-item" data-stab="modlist" title="模组列表中直接展示的信息"><i class="fas fa-th-list me-2"></i>模组列表显示</button>
                             <button type="button" class="settings-nav-item" data-stab="tooltip" title="悬浮模组时浮动框里显示的信息"><i class="fas fa-comment-dots me-2"></i>Tooltip 信息</button>
                             <button type="button" class="settings-nav-item" data-stab="global" title="全局优先加载 workshop 模组（禁用本地同名模组）"><i class="fas fa-sliders-h me-2"></i>全局特殊配置</button>
+                            <button type="button" class="settings-nav-item" data-stab="appearance" title="界面动效开关"><i class="fas fa-palette me-2"></i>界面外观</button>
                             <button type="button" class="settings-nav-item" data-stab="about" title="软件信息、作者与项目主页"><i class="fas fa-info-circle me-2"></i>关于</button>
                         </div>
                         <!-- 右侧板块内容 -->
@@ -600,7 +608,16 @@
                                 </div>
                                 <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
                                 <div id="s_globalSpecialMods" class="special-mods-list"></div>
-                                <div id="s_globalSpecialEmpty" class="text-secondary mt-2" style="display:none;">Mods 目录未检测到 .tmod 文件</div>
+                                <div id="s_globalSpecialEmpty" class="empty-inline mt-2" style="display:none;"><i class="fas fa-inbox"></i><span>Mods 目录未检测到 .tmod 文件</span></div>
+                            </div>
+                            <!-- 板块：界面外观 -->
+                            <div class="settings-pane" id="sp-appearance" style="display:none;">
+                                <div class="settings-pane-title">🎨 界面外观</div>
+                                <div class="settings-pane-desc">控制界面动效。若觉得背景动画影响观感或占用资源，可在此关闭；关闭后背景完全静止。</div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_bgGlowToggle" data-mskey="bg_glow">
+                                    <label class="form-check-label fw-bold" for="s_bgGlowToggle">背景光晕缓慢漂移</label>
+                                </div>
                             </div>
                             <!-- 板块：关于 -->
                             <div class="settings-pane" id="sp-about" style="display:none;">

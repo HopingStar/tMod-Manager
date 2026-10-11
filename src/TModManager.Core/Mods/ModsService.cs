@@ -17,6 +17,9 @@ public sealed class ModsService
     private readonly WorkshopScanner _workshop;
     private readonly SteamService _steam;
 
+    /// <summary>刷新模组元数据的进度（单例共享，前端轮询用）。</summary>
+    public ModMetaProgress Progress { get; } = new();
+
     public ModsService(AppPaths paths, JsonStore store, MetaStore meta, WorkshopScanner workshop, SteamService steam)
     {
         _paths = paths;
@@ -153,7 +156,7 @@ public sealed class ModsService
     }
 
     /// <summary>构建 /api/mod_meta 响应：本地 .tmod 逆向优先，Steam 缓存兜底；版本号缺失现场解析并回写。</summary>
-    public async Task<ModMetaResponse> BuildModMetaAsync()
+    public async Task<ModMetaResponse> BuildModMetaAsync(Action<int, int>? onProgress = null)
     {
         var cache = await _meta.ReadAsync();
         var data = await _store.ReadAsync();
@@ -175,8 +178,10 @@ public sealed class ModsService
         // 本地逆向优先：解析每个 .tmod 的 icon.png + Info
         var localMeta = cache["local_meta"] as JsonObject ?? new JsonObject();
         var patched = false;
+        var scanned = 0;
         foreach (var name in allNames)
         {
+            onProgress?.Invoke(++scanned, allNames.Count);   // 进度：扫描本地模组 i/N
             var tmod = TmodFinder.Find(name, _paths.DefaultModsPath, _paths.GlobalModpacksPath);
             if (tmod == null) continue;
             var meta = TmodParser.Parse(tmod);
@@ -187,6 +192,7 @@ public sealed class ModsService
                 ["author"] = meta.Author,
                 ["icon"] = IconSaver.Save(name, meta.IconBytes, _paths.IconsDir) ?? "",
                 ["version"] = meta.Version,
+                ["description"] = meta.Description,
             };
             patched = true;
         }
@@ -224,6 +230,9 @@ public sealed class ModsService
 
             var steamUpdated = GetLong(sm?["time_updated"]);
             int? updDays = steamUpdated > 0 ? (int)((now - steamUpdated) / 86400) : null;
+            // 描述优先级：先 Steam，后 .tmod 自身 Info 的 description
+            var steamDesc = sm?["description"]?.ToString() ?? "";
+            var desc = steamDesc.Length > 0 ? steamDesc : (lm["description"]?.ToString() ?? "");
             mods.Add(new ModMetaItem
             {
                 Name = name,
@@ -234,7 +243,7 @@ public sealed class ModsService
                 Version = version,
                 UpdateDaysAgo = updDays,
                 Tags = (sm?["tags"] as JsonArray)?.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0).ToList() ?? new(),
-                Description = sm?["description"]?.ToString() ?? "",
+                Description = desc,
                 Subscriptions = sm?["subscriptions"],
                 Favorited = sm?["favorited"],
                 Views = sm?["views"],
@@ -254,8 +263,22 @@ public sealed class ModsService
     /// 返回 (写盘后的缓存, Steam 失败明细 pid→原因)，对齐 Python refresh_mod_meta。</summary>
     public async Task<(JsonObject Cache, Dictionary<string, string> Errors)> RefreshModMetaAsync(bool force)
     {
+        Progress.Start("扫描本地模组");
+        try
+        {
+            return await RefreshModMetaCoreAsync(force);
+        }
+        finally
+        {
+            Progress.Finish();
+        }
+    }
+
+    private async Task<(JsonObject Cache, Dictionary<string, string> Errors)> RefreshModMetaCoreAsync(bool force)
+    {
         // 1) 本地逆向优先（回写 workshop_ids / local_meta / 缺失版本号）
-        _ = await BuildModMetaAsync();
+        _ = await BuildModMetaAsync((cur, total) => Progress.Report("扫描本地模组", cur, total));
+        Progress.Phase("扫描 Workshop 目录");
         var cache = await _meta.ReadAsync();
 
         // 2) Steam 补全：确保每个 workshop 模组都有元数据（含 time_updated / tags / file_size）
@@ -294,6 +317,7 @@ public sealed class ModsService
 
         if (need.Count > 0)
         {
+            Progress.Report("查询 Steam 元数据", 0, need.Count);
             var result = await _steam.QueryPublishDetailsAsync(need.Distinct().ToList());
             foreach (var kv in result.Results) metaObj[kv.Key] = kv.Value;
             foreach (var kv in result.Errors) errors[kv.Key] = kv.Value;
@@ -498,6 +522,7 @@ public sealed class ModsService
         Dictionary<string, string> fnameToInternal, JsonObject cache, Dictionary<string, string> idMap, double nowTs)
     {
         var meta = cache["meta"] as JsonObject ?? new JsonObject();
+        var localMeta = cache["local_meta"] as JsonObject ?? new JsonObject();
         var result = new List<ModEntry>();
         foreach (var n in names)
         {
@@ -508,6 +533,10 @@ public sealed class ModsService
             int? updDays = steamUpdated > 0 ? (int)((nowTs - steamUpdated) / 86400) : null;
             // 冲突：按内部 ID 判断「本地 + Workshop 同时存在」（文件名可能带版本后缀，不可靠）
             var nid = fnameToInternal.GetValueOrDefault(n) ?? n;
+            // 描述优先级：先 Steam，后 .tmod 自身 Info 的 description
+            var steamDesc = sm?["description"]?.ToString() ?? "";
+            var lm = localMeta[n] as JsonObject ?? new JsonObject();
+            var desc = steamDesc.Length > 0 ? steamDesc : (lm["description"]?.ToString() ?? "");
             result.Add(new ModEntry
             {
                 Name = n,
@@ -517,7 +546,7 @@ public sealed class ModsService
                 Conflict = localInternal.Contains(nid) && wsInternal.Contains(nid),
                 UpdateDaysAgo = updDays,
                 Tags = (sm?["tags"] as JsonArray)?.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0).ToList() ?? new(),
-                Description = sm?["description"]?.ToString() ?? "",
+                Description = desc,
                 Subscriptions = sm?["subscriptions"],
                 Favorited = sm?["favorited"],
                 Views = sm?["views"],

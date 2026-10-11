@@ -43,6 +43,14 @@ let showTooltipTags = true;      // 显示标签（紫色 chip）
 let showTooltipHeat = true;      // 显示热度（🔥订阅 ⭐收藏 👁️浏览）
 let showTooltipSize = true;      // 显示大小（💾）
 let showTooltipCreated = true;   // 显示创建时间（📅）
+// 界面外观
+let bgGlow = true;               // 背景光晕缓慢漂移（默认开启，可在「全局设置 → 界面外观」关闭）
+// 启动状态（来自 /api/status）：用于在版本卡片上标「上次启动 / 运行中」
+let tmodRunning = false;
+let _lastVersionsSig = '';       // 版本集合签名：集合变了才播放错峰入场动画
+let _lastPacksSig = '';          // 整合包集合签名
+let lastLaunchVersionId = null;
+let lastLaunchPackId = null;
 // 模组列表弹窗界面级状态
 let mergedViewFilter = 'all';    // 合并列表显示过滤：'all' | 'enabled' | 'disabled'
 // Tooltip 开关已移至全局设置（show_tooltip），弹窗内不再提供按钮
@@ -130,11 +138,26 @@ function sortFavFirst(items, favs, idFn) {
 // ========== 加载数据 ==========
 // 启动遮罩：首次数据就绪后淡出（至少展示一小段时间，避免一闪而过）
 const _bootShownAt = Date.now();
+// 启动遮罩文案轮播：加载期间循环切换提示语，遮罩隐藏后自动停止
+const _bootMsgs = ['正在读取版本…', '正在扫描模组…', '正在检测更新…', '正在整理界面…'];
+let _bootMsgIdx = 0;
+function startBootTextRotation() {
+    const el = document.getElementById('bootText');
+    if (!el) return;
+    const timer = setInterval(() => {
+        const ov = document.getElementById('bootOverlay');
+        if (!ov || ov.dataset.done) { clearInterval(timer); return; }
+        _bootMsgIdx = (_bootMsgIdx + 1) % _bootMsgs.length;
+        el.style.opacity = '0';
+        setTimeout(() => { el.textContent = _bootMsgs[_bootMsgIdx]; el.style.opacity = '1'; }, 220);
+    }, 1300);
+}
+
 function hideBootOverlay() {
     const ov = document.getElementById('bootOverlay');
     if (!ov || ov.dataset.done) return;
     ov.dataset.done = '1';
-    const delay = Math.max(0, 400 - (Date.now() - _bootShownAt));  // 至少展示 400ms
+    const delay = Math.max(0, 2000 - (Date.now() - _bootShownAt));  // 至少展示 2s（给启动 logo 足够出场时间）
     setTimeout(() => {
         ov.style.transition = 'opacity 0.4s ease';
         ov.style.opacity = '0';
@@ -341,6 +364,8 @@ function updateMissingMarkers() {
 }
 
 function updateTmodStatus(running) {
+    tmodRunning = !!running;
+    updateCardHighlights();   // 运行状态变化 → 同步版本卡片辉光
     const dot = document.getElementById('tmodIndicator');
     const text = document.getElementById('tmodText');
     const killBtn = document.getElementById('killGameBtn');
@@ -369,9 +394,13 @@ function updateTmodStatus(running) {
 }
 
 function updateLastLaunch(data) {
+    lastLaunchVersionId = data.version_id || null;   // 供版本卡片标「上次启动 / 运行中」
+    lastLaunchPackId = data.pack_id || null;
+    updateCardHighlights();
     const text = document.getElementById('lastLaunchText');
-    if (data.version_name && data.pack_name) {
-        let info = `${data.version_name} → ${data.pack_name}`;
+    // 只要有版本名就显示（直接启动 / 特殊加载启动只记版本，整合包启动才有 pack_name）
+    if (data.version_name) {
+        let info = data.pack_name ? `${data.version_name} → ${data.pack_name}` : data.version_name;
         if (data.version_path) {
             info += ` (路径: ${data.version_path})`;
         }
@@ -379,6 +408,19 @@ function updateLastLaunch(data) {
     } else {
         text.textContent = '暂无启动记录';
     }
+}
+
+// 版本卡片状态高亮：is-last（上次启动）/ is-running（运行中，带呼吸辉光）
+function updateCardHighlights() {
+    document.querySelectorAll('.version-card').forEach(card => {
+        const id = card.dataset.version;
+        const isLast = !!lastLaunchVersionId && id === lastLaunchVersionId;
+        const isRun = isLast && tmodRunning;
+        card.classList.toggle('is-last', isLast);
+        card.classList.toggle('is-running', isRun);
+        const badge = card.querySelector('.last-launch-badge');
+        if (badge) badge.textContent = isRun ? '运行中' : '上次启动';
+    });
 }
 
 // ========== 强制关闭游戏 ==========
@@ -399,13 +441,61 @@ async function killGame() {
     });
 }
 
+// ========== 通用展示辅助 ==========
+// 模组元数据索引：name → meta。modMeta 每次加载都会被整体重新赋值，
+// 用「引用是否变化」判断缓存是否失效；渲染时 O(1) 查表，取代原来的 O(n²) 线性扫描。
+let _modMetaIndexCache = null;
+let _modMetaIndexSrc = null;
+function modMetaIndex() {
+    if (_modMetaIndexSrc !== modMeta) {
+        const map = new Map();
+        for (const m of (modMeta.mods || [])) map.set(m.name, m);
+        _modMetaIndexCache = map;
+        _modMetaIndexSrc = modMeta;
+    }
+    return _modMetaIndexCache;
+}
+
+// 计数：值有变化才写入并弹跳一下（值没变则完全不动，避免重复动画）
+function setCountText(el, value) {
+    const node = (typeof el === 'string') ? document.getElementById(el) : el;
+    if (!node) return;
+    const txt = String(value);
+    if (node.textContent === txt) return;
+    node.textContent = txt;
+    node.classList.remove('count-bump');
+    void node.offsetWidth;          // 强制回流，重启动画
+    node.classList.add('count-bump');
+}
+
+// 空状态：大号淡色图标 + 标题 + 说明 + 可选引导按钮
+function emptyStateHtml(icon, title, desc, actionHtml) {
+    return `<div class="empty-state">
+        <i class="fas ${icon}"></i>
+        <div class="empty-title">${escapeHtml(title)}</div>
+        ${desc ? `<div class="empty-desc">${escapeHtml(desc)}</div>` : ''}
+        ${actionHtml ? `<div class="empty-action">${actionHtml}</div>` : ''}
+    </div>`;
+}
+
+// 行内紧凑空状态（嵌在卡片 / 列表里用）
+function emptyInlineHtml(icon, text) {
+    return `<div class="empty-inline"><i class="fas ${icon}"></i><span>${escapeHtml(text)}</span></div>`;
+}
+
+// 骨架屏占位（加载中，避免内容突然出现造成「闪一下」）
+function skeletonHtml(rows = 4) {
+    return `<div class="skeleton-list">${'<div class="skeleton-row"></div>'.repeat(rows)}</div>`;
+}
+
 // ========== 渲染版本卡片 ==========
 function renderVersions() {
     const container = document.getElementById('versionList');
     if (versions.length === 0) {
-        container.innerHTML = `<div class="alert alert-info text-center glass-card border-0">
-            <i class="fas fa-info-circle me-2"></i>暂无版本，请添加。
-        </div>`;
+        container.innerHTML = emptyStateHtml('fa-layer-group', '还没有任何版本',
+            '添加一个 tModLoader 版本，即可开始管理模组与整合包',
+            `<button class="btn btn-sm btn-primary neon-btn" onclick="openAddVersionModal()"><i class="fas fa-plus me-1"></i>添加版本</button>`);
+        _lastVersionsSig = '';
         return;
     }
 
@@ -413,20 +503,32 @@ function renderVersions() {
     // 收藏的版本置顶，其余保持原顺序
     const sorted = sortFavFirst(versions, favs, v => v.id);
 
+    // 错峰淡入：仅当「版本集合」发生变化时播放（收藏切换等无关重绘不重播动画）
+    const sig = sorted.map(v => v.id).join(',');
+    const animate = (sig !== _lastVersionsSig);
+    _lastVersionsSig = sig;
+
     let html = '';
+    let vIdx = 0;
     for (const v of sorted) {
+        const delay = Math.min(vIdx++, 12) * 35;
+        const staggerCls = animate ? ' stagger-in' : '';
+        const staggerStyle = animate ? ` style="--d:${delay}ms"` : '';
         const label = `${v.name} ${v.version_info ? '（' + v.version_info + '）' : ''}`;
         const updateBadge = hasTmodUpdate(v.version_info)
             ? ' <span class="tmod-update-rainbow"><span class="tur-inner"><span class="tur-text">有可用更新</span></span></span>'
             : '';
         const starIcon = favs.includes(v.id) ? 'fas fa-star faved' : 'fa-regular fa-star';
         html += `
-        <div class="card glass-card mb-4 border-0 version-card" data-version="${v.id}">
+        <div class="card glass-card mb-4 border-0 version-card${staggerCls}"${staggerStyle} data-version="${v.id}">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                <div><i class="fas fa-folder-open text-warning me-2"></i><strong>${escapeHtml(label)}</strong>${updateBadge}</div>
+                <div><span class="last-launch-badge">上次启动</span><i class="fas fa-folder-open text-warning me-2"></i><strong>${escapeHtml(label)}</strong>${updateBadge}</div>
                 <div class="d-flex align-items-center">
                     <button class="btn btn-sm btn-success me-1" data-action="launchDirect" data-version="${v.id}" title="直接启动：使用当前 Mods 目录的 enabled.json 启动该版本，不做任何修改（不覆盖 enabled.json）">
                         <i class="fas fa-play me-1"></i>直接启动
+                    </button>
+                    <button class="icon-btn add-pack me-1" data-action="addPackToVersion" data-version="${v.id}" title="为该版本添加一个整合包">
+                        <i class="fas fa-plus"></i>
                     </button>
                     <button class="icon-btn me-1" data-action="viewVersionMods" data-version="${v.id}" title="查看该版本模组列表（Workshop + 本地，对照游戏加载时的 enabled.json）">
                         <i class="fas fa-th-list"></i>
@@ -441,27 +543,25 @@ function renderVersions() {
             </div>
             <div class="card-body">
                 <div class="text-danger small fw-bold mb-2" data-version-marker="${v.id}" style="display:none;"></div>
-                <div class="mb-3">
+                <div>
                     <label class="fw-bold">已添加的整合包</label>
                     <div id="packList-${v.id}" class="mt-2">
                         ${renderPackList(v)}
                     </div>
                 </div>
-                <button class="btn btn-success neon-btn" onclick="openModal('${v.id}')">
-                    <i class="fas fa-plus me-1"></i>添加整合包
-                </button>
             </div>
         </div>
         `;
     }
     container.innerHTML = html;
     updateMissingMarkers();
+    updateCardHighlights();   // 标记「上次启动 / 运行中」卡片
 }
 
 // 渲染整合包列表（纵向）
 function renderPackList(version) {
     if (!version.packs || version.packs.length === 0) {
-        return `<div class="text-secondary"><i class="fas fa-inbox me-1"></i>尚未添加任何整合包</div>`;
+        return emptyInlineHtml('fa-inbox', '尚未添加任何整合包');
     }
 
     let html = '<div class="list-group">';
@@ -495,6 +595,7 @@ document.getElementById('versionList').addEventListener('click', async (e) => {
     const packId = btn.dataset.pack;
     if (action === 'deleteVersion') await deleteVersion(versionId);
     else if (action === 'launchDirect') await launchDirect(versionId);
+    else if (action === 'addPackToVersion') openModal(versionId);   // 打开「添加整合包」选择弹窗
     else if (action === 'viewVersionMods') await openVersionMods(versionId);
     else if (action === 'restoreVersion') await restoreVersion(versionId);
     else if (action === 'launch') await launchPack(versionId, packId);
@@ -533,14 +634,21 @@ function renderPacksView() {
     });
 
     if (entries.length === 0) {
-        container.innerHTML = `<div class="alert alert-info text-center glass-card border-0">
-            <i class="fas fa-inbox me-2"></i>尚未添加任何整合包，请先在「以版本显示」中添加。
-        </div>`;
+        container.innerHTML = emptyStateHtml('fa-boxes', '还没有任何整合包',
+            '整合包在「以版本显示」里添加，用于把一组模组打包分发',
+            `<button class="btn btn-sm btn-outline-info neon-btn" onclick="switchView('versions')"><i class="fas fa-layer-group me-1"></i>去添加</button>`);
+        _lastPacksSig = '';
         return;
     }
 
+    // 错峰淡入：仅当整合包集合变化时播放
+    const sig = entries.map(e => e[0]).join(',');
+    const animate = (sig !== _lastPacksSig);
+    _lastPacksSig = sig;
+
     // 每个整合包一个横向长条卡片：左侧名称、中间归属版本（每版本一个 chip 含启动按钮）、最右收藏
     let html = '';
+    let pIdx = 0;
     for (const [packId, info] of entries) {
         const pack = globalPacks.find(p => p.id === packId);
         const name = pack ? pack.name : packId;
@@ -552,8 +660,11 @@ function renderPacksView() {
         const spIndep = !!(pState && pState.independent);
         const spEff = spIndep || !!(pState && pState.effective) || !!specialStatus.global_active;
         const spClass = spIndep ? 'special-independent' : (spEff ? 'special-active' : '');
+        const delay = Math.min(pIdx++, 12) * 35;
+        const staggerCls = animate ? ' stagger-in' : '';
+        const staggerStyle = animate ? ` style="--d:${delay}ms"` : '';
         html += `
-        <div class="pack-bar glass-card mb-2">
+        <div class="pack-bar glass-card mb-2${staggerCls}"${staggerStyle}>
             <div class="pack-bar-row">
             <div class="pack-bar-name"><i class="fas fa-cube text-info me-2"></i>${escapeHtml(name)}<span class="text-danger small fw-bold ms-2" data-pack-marker="${escapeHtml(packId)}" style="display:none;"></span></div>
             <div class="pack-bar-versions">`;
@@ -598,14 +709,21 @@ function switchView(view) {
     currentView = view;
     const versionList = document.getElementById('versionList');
     const packList = document.getElementById('packListView');
+    let shown;
     if (view === 'versions') {
         versionList.style.display = '';
         packList.style.display = 'none';
+        shown = versionList;
     } else {
         versionList.style.display = 'none';
         packList.style.display = '';
         renderPacksView();
+        shown = packList;
     }
+    // 淡入切换（重启动画：移除类 → 强制回流 → 重新添加）
+    shown.classList.remove('view-fade');
+    void shown.offsetWidth;
+    shown.classList.add('view-fade');
     document.getElementById('btnViewVersions').classList.toggle('active', view === 'versions');
     document.getElementById('btnViewPacks').classList.toggle('active', view === 'packs');
     // 刷新运行状态，让新渲染的启动按钮禁用/启用与当前游戏状态一致
@@ -756,7 +874,7 @@ async function openSpecial(packId) {
     document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
     document.body.classList.remove('modal-open');
     new bootstrap.Modal(document.getElementById('specialModal')).show();
-    document.getElementById('specialModsList').innerHTML = '<span class="text-secondary">加载中...</span>';
+    document.getElementById('specialModsList').innerHTML = skeletonHtml(4);
     try {
         const res = await fetch(`/api/special/${encodeURIComponent(packId)}`);
         const data = await res.json();
@@ -785,7 +903,7 @@ async function openGlobalSpecial() {
     document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
     document.body.classList.remove('modal-open');
     new bootstrap.Modal(document.getElementById('specialModal')).show();
-    document.getElementById('specialModsList').innerHTML = '<span class="text-secondary">加载中...</span>';
+    document.getElementById('specialModsList').innerHTML = skeletonHtml(4);
     try {
         const res = await fetch('/api/global_special');
         const data = await res.json();
@@ -838,7 +956,7 @@ let globalSpecialTotal = 0;   // 本地 Mods 模组总数
 // 加载全局特殊加载配置并渲染模组列表
 async function loadGlobalSpecialPane() {
     const listEl = document.getElementById('s_globalSpecialMods');
-    if (listEl) listEl.innerHTML = '<span class="text-secondary">加载中...</span>';
+    if (listEl) listEl.innerHTML = skeletonHtml(4);
     try {
         const res = await fetch('/api/global_special');
         const data = await res.json();
@@ -862,7 +980,7 @@ function renderGlobalSpecialMods(mods) {
         const selected = globalSpecialSelection.has(m.name);
         const d = modDisplay(m.name);
         html += `<div class="special-mod ${selected ? 'selected' : ''}" data-name="${escapeHtml(m.name)}" onclick="toggleGlobalSpecialMod(this)">
-            <span title="${escapeHtml(d.label)}">${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" onerror="this.style.display='none'" alt="">` : `<i class="fas fa-cube me-1"></i>`}${d.labelHtml}</span>
+            <span title="${escapeHtml(d.label)}"><span class="mod-icon-slot"><i class="fas fa-cube mod-icon-ph"></i>${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" draggable="false" onerror="this.style.display='none'" alt="">` : ''}</span>${d.labelHtml}</span>
             <span class="special-mod-badge">${selected ? '本地已禁用' : ''}</span>
         </div>`;
     }
@@ -886,7 +1004,11 @@ function toggleGlobalSpecialMod(el) {
 function updateGlobalSpecialCount() {
     const el = document.getElementById('s_globalSpecialCount');
     if (!el) return;
-    el.textContent = `共 ${globalSpecialTotal} 个模组 · 已选 ${globalSpecialSelection.size} 个`;
+    const total = globalSpecialTotal, sel = globalSpecialSelection.size;
+    const sig = total + '/' + sel;
+    if (el.dataset.sig === sig) return;   // 数值未变则不重建，避免重复播放弹跳
+    el.dataset.sig = sig;
+    el.innerHTML = `共 <span class="count-bump">${total}</span> 个模组 · 已选 <span class="count-bump">${sel}</span> 个`;
 }
 
 function updateGlobalSpecialState() {
@@ -936,6 +1058,11 @@ function bindMetaSwitch(key, getVal, setVal) {
     });
 }
 
+// 背景光晕开关 → html.bg-glow-on 类（CSS 动画开关）
+function applyBgGlow() {
+    document.documentElement.classList.toggle('bg-glow-on', !!bgGlow);
+}
+
 // 初始化全局设置弹窗：板块切换 + 各开关绑定
 function initSettingsModal() {
     const nav = document.getElementById('settingsNav');
@@ -945,6 +1072,13 @@ function initSettingsModal() {
     });
     const ga = document.getElementById('s_globalSpecialActive');
     if (ga) ga.addEventListener('change', updateGlobalSpecialState);
+    // 背景光晕开关（不走 bindMetaSwitch：无需触发模组列表重绘）
+    const bgT = document.getElementById('s_bgGlowToggle');
+    if (bgT) bgT.addEventListener('change', () => {
+        bgGlow = bgT.checked;
+        applyBgGlow();
+        saveMetaSetting('bg_glow', bgGlow);
+    });
     bindMetaSwitch('tmod_update', () => tmodUpdateCheck, v => { tmodUpdateCheck = v; });
     bindMetaSwitch('tmod_update_ignore_preview', () => tmodUpdateIgnorePreview, v => { tmodUpdateIgnorePreview = v; });
     bindMetaSwitch('show_tags', () => showTags, v => { showTags = v; });
@@ -989,7 +1123,7 @@ function renderSpecialMods(mods) {
         const selected = specialSelection.has(m.name);
         const d = modDisplay(m.name);
         html += `<div class="special-mod ${selected ? 'selected' : ''}" data-name="${escapeHtml(m.name)}" onclick="toggleSpecialMod(this)">
-            <span title="${escapeHtml(d.label)}">${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" onerror="this.style.display='none'" alt="">` : `<i class="fas fa-cube me-1"></i>`}${d.labelHtml}</span>
+            <span title="${escapeHtml(d.label)}"><span class="mod-icon-slot"><i class="fas fa-cube mod-icon-ph"></i>${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" draggable="false" onerror="this.style.display='none'" alt="">` : ''}</span>${d.labelHtml}</span>
             <span class="special-mod-badge">${selected ? '本地已禁用' : ''}</span>
         </div>`;
     }
@@ -1012,7 +1146,12 @@ function toggleSpecialMod(el) {
 
 function updateSpecialCount() {
     const el = document.getElementById('specialCount');
-    el.textContent = `共 ${specialTotal} 个模组 · 已选 ${specialSelection.size} 个`;
+    if (!el) return;
+    const total = specialTotal, sel = specialSelection.size;
+    const sig = total + '/' + sel;
+    if (el.dataset.sig === sig) return;   // 数值未变则不重建
+    el.dataset.sig = sig;
+    el.innerHTML = `共 <span class="count-bump">${total}</span> 个模组 · 已选 <span class="count-bump">${sel}</span> 个`;
 }
 
 function updateSpecialListState() {
@@ -1077,7 +1216,7 @@ function tmlRichToHtml(text) {
 }
 
 function modDisplay(name) {
-    const m = (modMeta.mods || []).find(x => x.name === name);
+    const m = modMetaIndex().get(name);
     if (m && m.display_name) {
         // 本名在外，文件名（内部名）在括号内（浅色小字）
         return {
@@ -1215,9 +1354,37 @@ function showModMetaHint(data) {
 }
 
 // 📋 模组列表弹窗里的刷新按钮：刷新 → 重新渲染当前列表 → 内联提示
+// 刷新进度：轮询 /api/mod_meta/progress，显示在按钮左侧
+let _metaProgressTimer = null;
+function startMetaRefreshProgress() {
+    const el = document.getElementById('modMetaRefreshProgress');
+    if (!el) return;
+    el.style.display = '';
+    el.innerHTML = '<i class="fas fa-spinner ui-spin me-1"></i>准备中…';
+    const tick = async () => {
+        try {
+            const d = await (await fetch('/api/mod_meta/progress')).json();
+            if (!d.running) return;   // 已结束：保留最后一次内容，交给 stop 清理
+            const num = d.total > 0
+                ? ` <span class="meta-refresh-num">${d.current}/${d.total}</span>`
+                : '';
+            el.innerHTML = `<i class="fas fa-spinner ui-spin me-1"></i>${escapeHtml(d.phase || '处理中')}${num}`;
+        } catch (e) { /* 轮询失败忽略，下一轮重试 */ }
+        _metaProgressTimer = setTimeout(tick, 300);
+    };
+    _metaProgressTimer = setTimeout(tick, 300);
+}
+
+function stopMetaRefreshProgress() {
+    if (_metaProgressTimer) { clearTimeout(_metaProgressTimer); _metaProgressTimer = null; }
+    const el = document.getElementById('modMetaRefreshProgress');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
 async function refreshModMetaFromMods() {
     const btn = document.getElementById('modMetaRefreshBtn');
     if (btn) btn.disabled = true;
+    startMetaRefreshProgress();
     try {
         const res = await fetch('/api/mod_meta/refresh', {
             method: 'POST',
@@ -1235,6 +1402,7 @@ async function refreshModMetaFromMods() {
     } catch (e) {
         showModMetaHint({ message: '刷新失败: ' + e.message, failed: {} });
     }
+    stopMetaRefreshProgress();
     if (btn) btn.disabled = false;
 }
 
@@ -1271,28 +1439,32 @@ async function openVersionMods(versionId) {
     await openModsList('version', null, versionId);
 }
 
-// 打开列表前按模式固定布局，避免打开后「3列↔2列」切换瞬间（版本=2列，整合包=3列）
-function applyModsLayout(mode) {
-    const show = (id, v) => { const el = document.getElementById(id); if (el) el.style.display = v; };
-    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.innerHTML = `<span class="text-secondary">${txt}</span>`; };
-    const mw = document.getElementById('missingModsWrap');
-    if (mode === 'version') {
-        // 2 列：合并列表（启用上移+禁用下移）+ 缺失列表，等宽 col-md-6
-        show('mergedModsWrap', '');
-        show('enabledModsWrap', 'none');
-        show('disabledModsWrap', 'none');
-        if (mw) { mw.classList.remove('col-md-4'); mw.classList.add('col-md-6'); }
-        set('mergedModsList', '加载中...');
-    } else {
-        // 3 列：已启用 + 未启用 + 缺失，各 col-md-4
-        show('mergedModsWrap', 'none');
-        show('enabledModsWrap', '');
-        show('disabledModsWrap', '');
-        if (mw) { mw.classList.remove('col-md-6'); mw.classList.add('col-md-4'); }
-        set('enabledModsList', '加载中...');
-        set('disabledModsList', '加载中...');
-    }
-    set('missingModsList', '加载中...');
+// 打开列表前的占位（版本 / 整合包统一为单列布局）
+// 清空模组列表弹窗的内容（关闭时 / 打开前调用），避免上次残留内容闪现
+function resetModsModalContent() {
+    const list = document.getElementById('mergedModsList');
+    if (list) list.innerHTML = '';
+    const hidden = document.getElementById('mergedHidden');
+    if (hidden) hidden.textContent = '';
+    const cnt = document.getElementById('mergedCount');
+    if (cnt) cnt.textContent = '0';
+    const title = document.getElementById('packModsTitle');
+    if (title) title.textContent = '';
+    const hint = document.getElementById('modMetaHint');
+    if (hint) hint.style.display = 'none';
+    hideModTooltip();
+}
+
+// 弹窗关闭事件只挂一次
+function initModsModalReset() {
+    const modal = document.getElementById('packModsModal');
+    if (modal) modal.addEventListener('hidden.bs.modal', resetModsModalContent);
+}
+
+function applyModsLayout() {
+    resetModsModalContent();                  // 先清残留，避免上一次的「因…而隐藏」等内容闪一下
+    const el = document.getElementById('mergedModsList');
+    if (el) el.innerHTML = skeletonHtml(5);   // 骨架条占位，避免加载完成瞬间「闪一下」
 }
 
 async function openModsList(mode, packId, versionId) {
@@ -1319,15 +1491,19 @@ async function openModsList(mode, packId, versionId) {
     updateModsToolbar();
     await ensureModMeta();
     let title;
+    let kindTitle;
     if (mode === 'version') {
         const v = versions.find(x => x.id === versionId);
-        title = (v ? v.name : versionId) + ' 的模组列表';
+        title = v ? v.name : versionId;
+        kindTitle = '版本模组';
     } else {
         const pack = globalPacks.find(p => p.id === packId);
-        title = (pack ? pack.name : packId) + ' 的模组列表';
+        title = pack ? pack.name : packId;
+        kindTitle = '整合包模组';
     }
+    document.getElementById('packModsKindTitle').textContent = kindTitle;
     document.getElementById('packModsTitle').textContent = title;
-    applyModsLayout(mode);   // 打开前就固定好列布局与「加载中」占位，避免 3列↔2列 切换瞬间
+    applyModsLayout();   // 打开前先放骨架条占位
     document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
     document.body.classList.remove('modal-open');
     new bootstrap.Modal(document.getElementById('packModsModal')).show();
@@ -1361,41 +1537,48 @@ async function fetchPackMods(packId, versionId) {
     return data;
 }
 
-// 渲染列表 + 计数（版本模式：合并「启用+禁用」+缺失列；整合包模式：三列）
+// 渲染列表 + 计数（版本 / 整合包统一：单列，启用 → 未启用 → 缺失）
 function renderPackModsData(data) {
     buildModFilterTags(data);
     const enabled = data.enabled || [];
     const disabled = data.disabled || [];
     const missing = data.missing || [];
-    const show = (id, v) => { const el = document.getElementById(id); if (el) el.style.display = v; };
-    const mw = document.getElementById('missingModsWrap');
-    if (currentModsMode === 'version') {
-        // 合并：默认全部（启用绿上移 + 禁用灰下移）；工具栏可切换只显示启用/禁用；缺失单独一列，两列等宽（col-md-6）
-        show('mergedModsWrap', '');
-        show('enabledModsWrap', 'none');
-        show('disabledModsWrap', 'none');
-        if (mw) { mw.classList.remove('col-md-4'); mw.classList.add('col-md-6'); }
-        let merged;
-        if (mergedViewFilter === 'enabled') {
-            merged = enabled.map(m => Object.assign({}, m, { _mtype: 'enabled' }));
-        } else if (mergedViewFilter === 'disabled') {
-            merged = disabled.map(m => Object.assign({}, m, { _mtype: 'disabled' }));
-        } else {
-            merged = [...enabled.map(m => Object.assign({}, m, { _mtype: 'enabled' })),
-                      ...disabled.map(m => Object.assign({}, m, { _mtype: 'disabled' }))];
-        }
-        const mc = document.getElementById('mergedCount');
-        if (mc) mc.textContent = renderModsList('mergedModsList', merged, 'enabled', true, '暂无模组').length;
-        document.getElementById('missingCount').textContent = renderModsList('missingModsList', missing, 'missing', true).length;
-    } else {
-        show('mergedModsWrap', 'none');
-        show('enabledModsWrap', '');
-        show('disabledModsWrap', '');
-        if (mw) { mw.classList.remove('col-md-6'); mw.classList.add('col-md-4'); }
-        document.getElementById('enabledCount').textContent = renderModsList('enabledModsList', enabled, 'enabled', true).length;
-        document.getElementById('disabledCount').textContent = renderModsList('disabledModsList', disabled, 'disabled', true).length;
-        document.getElementById('missingCount').textContent = renderModsList('missingModsList', missing, 'missing', true).length;
-    }
+    const byIcon = arr => [...arr].sort((a, b) => {
+        const ia = hasModIcon(a.name || a), ib = hasModIcon(b.name || b);
+        return ia === ib ? 0 : (ia ? -1 : 1);
+    });
+    let merged = [];
+    // 各档位只显示各自分组：全部=三组；已启用/未启用/缺失=仅该组
+    if (mergedViewFilter === 'all' || mergedViewFilter === 'enabled')
+        merged.push(...byIcon(enabled).map(m => Object.assign({}, m, { _mtype: 'enabled' })));
+    if (mergedViewFilter === 'all' || mergedViewFilter === 'disabled')
+        merged.push(...byIcon(disabled).map(m => Object.assign({}, m, { _mtype: 'disabled' })));
+    if (mergedViewFilter === 'all' || mergedViewFilter === 'missing')
+        merged.push(...missing.map(m => Object.assign({}, m, { _mtype: 'missing' })));
+    const mc = document.getElementById('mergedCount');
+    // skipSort：分组顺序（启用→未启用→缺失）已在上面排好，不能再被图标排序打乱
+    // renderModsList 返回的是「经搜索/标签筛选后」实际展示的列表
+    const shownList = renderModsList('mergedModsList', merged, 'enabled', true, '暂无模组', true);
+    setCountText(mc, shownList.length);
+    renderMergedHiddenInfo(enabled.length + disabled.length + missing.length, shownList.length);
+}
+
+// 列头追加「・<未显示数> 个模组 因<原因>而隐藏」；无隐藏时清空
+// 原因取自实际生效的筛选维度：搜索 / 标签 / 是否已启用（可叠加）
+function renderMergedHiddenInfo(total, shown) {
+    const el = document.getElementById('mergedHidden');
+    if (!el) return;
+    const hidden = total - shown;
+    if (hidden <= 0) { el.textContent = ''; return; }
+    const reasons = [];
+    if (modSearchText.trim()) reasons.push('"搜索"');
+    if (modFilterTags.length > 0) reasons.push(`"${modFilterTags.length}个标签"`);
+    if (mergedViewFilter !== 'all') reasons.push('"是否已启用"');
+    if (!reasons.length) { el.textContent = ''; return; }
+    const joined = reasons.length === 1
+        ? reasons[0]
+        : reasons.slice(0, -1).join('、') + '和' + reasons[reasons.length - 1];
+    el.textContent = `・${hidden} 个模组 因${joined}而隐藏`;
 }
 
 // 更新检测源提示（橙色加粗）：仅版本列表显示（整合包是打包分发用，不做来源检测）
@@ -1412,60 +1595,65 @@ function updatePackModsSourceUI() {
 }
 
 // ========== 模组列表弹窗工具栏（启用/禁用切换 + Tooltip 开关） ==========
-// 循环切换合并列表显示过滤：全部 → 已启用 → 未启用 → 全部
+// 循环切换合并列表显示过滤：全部 → 已启用 → 未启用 → 缺失 → 全部
 function cycleMergedFilter() {
-    mergedViewFilter = mergedViewFilter === 'all' ? 'enabled' : (mergedViewFilter === 'enabled' ? 'disabled' : 'all');
+    const order = { all: 'enabled', enabled: 'disabled', disabled: 'missing', missing: 'all' };
+    mergedViewFilter = order[mergedViewFilter] || 'all';
     updateModsToolbar();
     rerenderCurrentMods();
 }
 
-// 同步工具栏「合并显示」按钮状态与样式（仅版本模式显示）
+// 同步工具栏「显示档位」按钮状态与样式（版本 / 整合包列表都可用）
 function updateModsToolbar() {
     const b = document.getElementById('modsMergedBtn');
     if (b) {
-        if (currentModsMode === 'version') {
-            b.style.display = '';
-            const map = {
-                all: ['全部', 'btn-outline-info neon-btn'],
-                enabled: ['已启用', 'btn-success'],
-                disabled: ['未启用', 'btn-outline-secondary']
-            };
-            const [txt, cls] = map[mergedViewFilter] || map.all;
-            b.innerHTML = `<i class="fas fa-layer-group me-1"></i>${txt}`;
-            b.className = 'btn btn-sm ' + cls;
-            b.title = '切换显示已启用 / 未启用模组（不影响缺失列）';
-        } else {
-            b.style.display = 'none';
-        }
+        b.style.display = '';
+        const map = {
+            all: ['全部', 'btn-outline-info neon-btn'],
+            enabled: ['已启用', 'btn-success'],
+            disabled: ['未启用', 'btn-outline-secondary'],
+            missing: ['缺失', 'btn-outline-danger']
+        };
+        const [txt, cls] = map[mergedViewFilter] || map.all;
+        b.innerHTML = `<i class="fas fa-layer-group me-1"></i>${txt}`;
+        b.className = 'btn btn-sm ' + cls;
+        b.title = '切换显示：全部 / 已启用 / 未启用 / 缺失';
     }
     const hint = document.getElementById('mergedHint');
     if (hint) {
-        hint.textContent = ({ all: '（绿色=已启用 / 灰色=未启用）', enabled: '（仅显示已启用）', disabled: '（仅显示未启用）' })[mergedViewFilter] || '';
+        hint.textContent = ({
+            all: '（绿=已启用 / 灰=未启用 / 红=缺失，自上而下）',
+            enabled: '（仅显示已启用）',
+            disabled: '（仅显示未启用）',
+            missing: '（仅显示缺失的模组）'
+        })[mergedViewFilter] || '';
     }
 }
 
 // 该模组是否有可加载的图标（用于排序：有图标上移）
 function hasModIcon(name) {
-    const m = (modMeta.mods || []).find(x => x.name === name);
+    const m = modMetaIndex().get(name);
     return !!(m && m.icon);
 }
 
 // 搜索 + 标签筛选（搜索匹配名称；标签取交集——模组必须包含所有选中标签）
 function applyModFilter(mods) {
     const q = modSearchText.trim().toLowerCase();
+    const wanted = modFilterTags.map(t => t.toLowerCase());   // 只转一次，别在循环里反复算
+    if (!q && !wanted.length) return mods || [];              // 无筛选：直接返回，省掉一趟遍历
     return (mods || []).filter(m => {
         const name = (typeof m === 'string') ? m : (m.name || '');
         if (q && name.toLowerCase().indexOf(q) < 0) return false;
-        if (modFilterTags.length > 0) {
+        if (wanted.length > 0) {
             const tags = ((m && m.tags) || []).map(t => String(t).toLowerCase());
             // 交集：每个选中标签都必须命中
-            if (!modFilterTags.every(t => tags.indexOf(t.toLowerCase()) >= 0)) return false;
+            if (!wanted.every(t => tags.indexOf(t) >= 0)) return false;
         }
         return true;
     });
 }
 
-function renderModsList(elId, mods, type, doFilter = false, emptyOverride) {
+function renderModsList(elId, mods, type, doFilter = false, emptyOverride, skipSort = false) {
     const el = document.getElementById(elId);
     // 搜索 + 标签筛选（仅模组列表弹窗调用时开启 doFilter）
     let list = mods || [];
@@ -1476,25 +1664,31 @@ function renderModsList(elId, mods, type, doFilter = false, emptyOverride) {
         const emptyText = hadData
             ? '无匹配模组'
             : (emptyOverride || ({ enabled: '暂无已启用的模组', disabled: '暂无未启用的模组', missing: '无缺失模组' }[type] || '（无）'));
-        el.innerHTML = `<span class="text-secondary">${emptyText}</span>`;
+        el.innerHTML = `<div class="empty-state">
+            <i class="fas ${hadData ? 'fa-filter-circle-xmark' : 'fa-cube'}"></i>
+            <div class="empty-desc">${escapeHtml(emptyText)}</div>
+        </div>`;
         return [];
     }
-    // 兼容字符串/对象输入；能加载到图标的模组排前面
-    const sorted = [...list].sort((a, b) => {
+    // 兼容字符串/对象输入；能加载到图标的模组排前面（skipSort=true 时保持调用方给定的顺序）
+    const sorted = skipSort ? [...list] : [...list].sort((a, b) => {
         const ia = hasModIcon(a.name || a), ib = hasModIcon(b.name || b);
         if (ia !== ib) return ia ? -1 : 1;
         return 0;
     });
+    const isVersionList = (currentModsMode === 'version');
     el.innerHTML = sorted.map(m => {
         const name = m.name || m;
         const d = modDisplay(name);
+        const mm = modMetaIndex().get(name);
         // 列表内信息统一以「在列表中显示统计数据」(showStats) 为总开关：
         // 需同时勾选 showStats 与对应细分开关，才在列表中显示；否则仅在模组详情弹窗显示。
-        // 同时存在标记（仅版本模组列表可用）：Workshop 与本地都有同名模组 → 橙色 chip
-        const conflictBadge = (currentModsMode === 'version' && showStats && showSource && m.conflict)
-            ? `<div class="mod-conflict-badge">本地 + Workshop</div>` : '';
-        // 更新（蓝色）：Steam 最近一次更新距今天数（不对比本地文件）
-        const updBadge = (showStats && showUpdate && m.update_days_ago != null) ? `<div class="mod-update-badge">🔄 更新于 ${fmtDaysAgo(m.update_days_ago)}</div>` : '';
+        // 同时存在标记（**仅版本模组列表可用**）：Workshop 与本地都有同名模组 → 橙色 chip
+        const conflictChip = (isVersionList && showStats && showSource && m.conflict)
+            ? `<span class="mod-conflict-badge">本地 + Workshop</span>` : '';
+        // 更新（蓝色）：Steam 最近一次更新距今天数（不对比本地文件）→ chip 内联在 id 之后
+        const hasUpd = (showStats && showUpdate && m.update_days_ago != null);
+        const updChip = hasUpd ? `<span class="mod-update-badge">🔄 更新于 ${fmtDaysAgo(m.update_days_ago)}</span>` : '';
         // 标签（紫色，独立一行）
         const tags = (m.tags || []).filter(Boolean);
         const tagsHtml = (showStats && showTags && tags.length) ? `<div class="mod-tags-line">${tags.map(t => `<span class="mod-tag">${escapeHtml(t)}</span>`).join('')}</div>` : '';
@@ -1508,29 +1702,29 @@ function renderModsList(elId, mods, type, doFilter = false, emptyOverride) {
         if (m.banned) stats.push('🚫 已下架');
         const statsHtml = (showStats && stats.length) ? `<div class="mod-stats-line">${stats.map(s => `<span class="mod-stat">${s}</span>`).join('')}</div>` : '';
         // Tooltip 内容（受「Tooltip 信息设置」控制：模组名置顶蓝色 / 版本号 / 热度/大小/创建时间 / 标签紫色chip）
-        const _mm = (modMeta.mods || []).find(x => x.name === name);
-        const _ver = (_mm && _mm.version) ? _mm.version : '';
+        const _ver = (mm && mm.version) ? mm.version : '';
         const ttParts = [];
         if (showTooltipName) ttParts.push(`<span class="tt-name">${escapeHtml(d.label)}</span>`);   // 模组名置顶（蓝色，不加粗）
         if (showTooltipVersion && _ver) ttParts.push(`<span class="tt-ver">v${escapeHtml(_ver)}</span>`);
         const _ttStats = [];
-        if (_mm) {
-            if (showTooltipHeat && _mm.subscriptions) _ttStats.push(`🔥 ${formatNum(_mm.subscriptions)}`);
-            if (showTooltipHeat && _mm.favorited) _ttStats.push(`⭐ ${formatNum(_mm.favorited)}`);
-            if (showTooltipHeat && _mm.views) _ttStats.push(`👁️ ${formatNum(_mm.views)}`);
-            if (showTooltipCreated && _mm.time_created) _ttStats.push(`📅 ${fmtDate(_mm.time_created)}`);
-            if (showTooltipSize && _mm.file_size) _ttStats.push(`💾 ${fmtSize(_mm.file_size)}`);
+        if (mm) {
+            if (showTooltipHeat && mm.subscriptions) _ttStats.push(`🔥 ${formatNum(mm.subscriptions)}`);
+            if (showTooltipHeat && mm.favorited) _ttStats.push(`⭐ ${formatNum(mm.favorited)}`);
+            if (showTooltipHeat && mm.views) _ttStats.push(`👁️ ${formatNum(mm.views)}`);
+            if (showTooltipCreated && mm.time_created) _ttStats.push(`📅 ${fmtDate(mm.time_created)}`);
+            if (showTooltipSize && mm.file_size) _ttStats.push(`💾 ${fmtSize(mm.file_size)}`);
         }
         if (_ttStats.length) ttParts.push(`<span class="tt-stat">${_ttStats.join(' · ')}</span>`);
         if (showTooltipTags && tags.length) ttParts.push(`<span class="tt-tags">${tags.map(t => `<span class="tt-tag">${escapeHtml(t)}</span>`).join(' ')}</span>`);
         const tooltipHtml = ttParts.join('<br>') || d.label;  // 全部关闭时兜底显示名称
+        // 图标右侧两行 —— 上行模组名称，下行模组 id（淡色）+ chip（冲突[仅版本] / 更新）
+        const headHtml = `<div class="mod-item-label">${(mm && mm.display_name) ? tmlRichToHtml(mm.display_name) : escapeHtml(name)}</div>
+                    <div class="mod-item-sub"><span class="mod-item-id">${escapeHtml(name)}</span>${conflictChip}${updChip}</div>`;
         return `<div class="mod-item ${m._mtype || type}" data-tt="${escapeHtml(tooltipHtml)}" data-action="modDetail" data-name="${escapeHtml(name)}" data-pack="${escapeHtml(currentModsPackId || '')}" data-version="${escapeHtml(currentModsVersionId || '')}">
             <div class="mod-item-main">
-                ${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" onerror="this.style.display='none'" alt="">` : `<i class="fas fa-cube me-1"></i>`}
+                <span class="mod-icon-slot"><i class="fas fa-cube mod-icon-ph"></i>${d.icon ? `<img class="mod-icon" src="${d.icon}" loading="lazy" decoding="async" draggable="false" onerror="this.style.display='none'" alt="">` : ''}</span>
                 <div class="mod-item-text">
-                    <div class="mod-item-label">${d.labelHtml}</div>
-                    ${conflictBadge}
-                    ${updBadge}
+                    ${headHtml}
                     ${tagsHtml}
                     ${statsHtml}
                 </div>
@@ -1614,10 +1808,10 @@ function applyModFilterState() {
     const has = modFilterTags.length > 0;
     if (btn) btn.classList.toggle('mod-filter-on', has);
     if (countEl) {
-        countEl.textContent = modFilterTags.length;
+        setCountText(countEl, modFilterTags.length);
         countEl.style.display = has ? '' : 'none';
     }
-    if (currentModsPackId) rerenderCurrentMods();
+    if (currentModsPackId || currentModsVersionId) rerenderCurrentMods();
 }
 
 // 绑定搜索框 / 标签下拉 / 点击外部关闭
@@ -1625,7 +1819,8 @@ function initModFilterEvents() {
     const input = document.getElementById('modSearchInput');
     if (input) input.addEventListener('input', () => {
         modSearchText = input.value;
-        if (currentModsPackId) rerenderCurrentMods();
+        // 版本模式只有 currentModsVersionId、没有 packId，两个都要判，否则版本列表搜索不刷新
+        if (currentModsPackId || currentModsVersionId) rerenderCurrentMods();
     });
     const list = document.getElementById('modFilterTags');
     if (list) list.addEventListener('change', (e) => {
@@ -1674,6 +1869,7 @@ function applyMetaSettings(ms) {
     if (typeof ms.show_tooltip_created === 'boolean') showTooltipCreated = ms.show_tooltip_created;
     if (typeof ms.tmod_update === 'boolean') tmodUpdateCheck = ms.tmod_update;
     if (typeof ms.tmod_update_ignore_preview === 'boolean') tmodUpdateIgnorePreview = ms.tmod_update_ignore_preview;
+    if (typeof ms.bg_glow === 'boolean') { bgGlow = ms.bg_glow; applyBgGlow(); }
     const sync = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
     // 全局设置弹窗里的开关（data-mskey 驱动，与特殊加载弹窗里的旧 ID 开关并行）
     const syncMs = (key, val) => { document.querySelectorAll(`[data-mskey="${key}"]`).forEach(el => { el.checked = val; }); };
@@ -1693,6 +1889,7 @@ function applyMetaSettings(ms) {
     sync('showTooltipCreatedToggle', showTooltipCreated); syncMs('show_tooltip_created', showTooltipCreated);
     sync('tmodUpdateToggle', tmodUpdateCheck); syncMs('tmod_update', tmodUpdateCheck);
     sync('tmodIgnorePreviewToggle', tmodUpdateIgnorePreview); syncMs('tmod_update_ignore_preview', tmodUpdateIgnorePreview);
+    sync('bgGlowToggle', bgGlow); syncMs('bg_glow', bgGlow);
     // 总开关同步子开关可用性（关闭总开关时置灰子开关）
     updateTooltipSubToggles();
     updateModlistSubToggles();
@@ -1954,7 +2151,7 @@ function showModDetailModal() {
 // 点击模组查看详情：🔥订阅数 + 描述 + 其它统计
 function openModDetail(name) {
     if (typeof bootstrap === 'undefined') { alert('无法查看详情：Bootstrap 未加载。'); return; }
-    const meta = (modMeta.mods || []).find(x => x.name === name);
+    const meta = modMetaIndex().get(name);
     if (!meta) {
         // 兜底：元数据里没有该模组（如未扫描到的 Workshop 模组）也打开详情，保证点击始终有响应
         const d = modDisplay(name);
@@ -1971,7 +2168,7 @@ function openModDetail(name) {
     const modTags = showTags ? (meta.tags || []) : [];
     const tagsHtml = modTags.length ? `<div class="mod-detail-tags">${modTags.map(t => `<span class="mod-tag">${escapeHtml(t)}</span>`).join('')}</div>` : '';
     if (meta.icon) {
-        html += `<div class="mod-detail-head"><img src="${meta.icon}" class="mod-detail-icon" decoding="async" onerror="this.style.display='none'" alt="">${tagsHtml}</div>`;
+        html += `<div class="mod-detail-head"><img src="${meta.icon}" class="mod-detail-icon" decoding="async" draggable="false" onerror="this.style.display='none'" alt="">${tagsHtml}</div>`;
     } else if (tagsHtml) {
         html += tagsHtml;
     }
@@ -1998,6 +2195,120 @@ function openModDetail(name) {
     showModDetailModal();
 }
 
+// ========== Tooltip 边框流光（JS 驱动） ==========
+// 光带沿 tooltip 边框走半圈：随机「左上→右下（顺时针，经右上）」或「右下→左上（经左下）」，
+// 走到终点淡出。粗细与边框一致、中心压在边框线上。
+// 计时是「全局」的：应用启动后持续循环，每随机 2~5s 检查一次；检查时 tooltip 正显示才播放。
+let _ttFlowTimer = null;   // 全局计时器
+let _ttFlowRaf = null;     // 当前流光的动画帧句柄
+
+const TT_FLOW_SEGS = 10;     // 彗尾段数
+const TT_FLOW_SEG_LEN = 7;   // 每段长度(px)
+const TT_FLOW_SPACING = 5;   // 相邻段间距(px)
+
+function ensureTooltipFlow(tip) {
+    let c = tip.querySelector('.tt-flow');
+    if (!c) {
+        c = document.createElement('span');
+        c.className = 'tt-flow';
+        c.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < TT_FLOW_SEGS; i++) {
+            const d = document.createElement('span');
+            d.className = 'tt-flow-dot';
+            c.appendChild(d);
+        }
+        tip.appendChild(c);
+    }
+    return c;
+}
+
+// 全局计时：应用启动后持续循环，每随机 2~5s 触发一次；触发时若 tooltip 正显示才播放流光
+function startTooltipFlowLoop() {
+    clearTimeout(_ttFlowTimer);
+    _ttFlowTimer = setTimeout(() => {
+        const tip = document.getElementById('modTooltip');
+        if (tip && tip.style.display === 'block') runTooltipFlow(tip);
+        startTooltipFlowLoop();   // 继续下一轮（与 tooltip 是否可见无关）
+    }, 2000 + Math.random() * 3000);   // 2~5s
+}
+
+// tooltip 隐藏时熄灯并取消进行中的动画帧（不影响全局计时）
+function hideTooltipFlow() {
+    if (_ttFlowRaf !== null) { cancelAnimationFrame(_ttFlowRaf); _ttFlowRaf = null; }
+    const tip = document.getElementById('modTooltip');
+    if (tip) tip.querySelectorAll('.tt-flow-dot').forEach(d => d.style.opacity = 0);
+}
+
+function runTooltipFlow(tip) {
+    const wrap = ensureTooltipFlow(tip);
+    const dots = wrap.children;
+    const W = tip.clientWidth, H = tip.clientHeight;
+    if (W <= 0 || H <= 0) return;
+
+    // ---- 圆角矩形路径（贴边框中心线；clientWidth/Height 是 padding box，边框中心在外侧 -0.5）----
+    const L = -0.5, T = -0.5, Rt = W + 0.5, Bt = H + 0.5;
+    const R = Math.max(0, Math.min(8.5, (W + 1) / 2 - 1, (H + 1) / 2 - 1)); // 与 border-radius 8px 对齐
+    const arc = Math.PI * R / 2;                       // 单个圆角的弧长
+    const sh = Math.max(0, W + 1 - 2 * R);             // 横边直线长
+    const sv = Math.max(0, H + 1 - 2 * R);             // 竖边直线长
+    const P = 4 * arc + 2 * sh + 2 * sv;               // 周长
+    const RAD = Math.PI / 180;
+    // 分段边界（顺时针，s=0 落在「左上圆角中点」；左上圆角被接缝切成两半）
+    const ha = arc / 2;                                // 半段圆角
+    const c1 = ha, c2 = c1 + sh, c3 = c2 + arc, c4 = c3 + sv,
+          c5 = c4 + arc, c6 = c5 + sh, c7 = c6 + arc, c8 = c7 + sv;
+
+    // 返回边框中心线上的点 { x, y, ang(切向角度°) }
+    function pointAt(s) {
+        s = ((s % P) + P) % P;                          // 归一化到 [0,P)
+        if (s < c1) { const p = s / ha; const th = (225 + p * 45) * RAD;                     // 左上圆角(后半)
+            return { x: (L + R) + R * Math.cos(th), y: (T + R) + R * Math.sin(th), ang: 315 + p * 45 }; }
+        if (s < c2) return { x: L + R + (s - c1), y: T, ang: 0 };                            // 上边 →
+        if (s < c3) { const p = (s - c2) / arc; const th = (270 + p * 90) * RAD;             // 右上圆角
+            return { x: (Rt - R) + R * Math.cos(th), y: (T + R) + R * Math.sin(th), ang: p * 90 }; }
+        if (s < c4) return { x: Rt, y: T + R + (s - c3), ang: 90 };                          // 右边 ↓
+        if (s < c5) { const p = (s - c4) / arc; const th = p * 90 * RAD;                     // 右下圆角
+            return { x: (Rt - R) + R * Math.cos(th), y: (Bt - R) + R * Math.sin(th), ang: 90 + p * 90 }; }
+        if (s < c6) return { x: Rt - R - (s - c5), y: Bt, ang: 180 };                        // 下边 ←
+        if (s < c7) { const p = (s - c6) / arc; const th = (90 + p * 90) * RAD;              // 左下圆角
+            return { x: (L + R) + R * Math.cos(th), y: (Bt - R) + R * Math.sin(th), ang: 180 + p * 90 }; }
+        if (s < c8) return { x: L, y: Bt - R - (s - c7), ang: 270 };                         // 左边 ↑
+        const p = (s - c8) / ha; const th = (180 + p * 45) * RAD;                            // 左上圆角(前半)
+        return { x: (L + R) + R * Math.cos(th), y: (T + R) + R * Math.sin(th), ang: 270 + p * 45 };
+    }
+
+    const sBR = c4 + arc / 2;                 // 右下角（圆角中点）
+    const fromTL = Math.random() < 0.5;       // 随机起点：左上角 或 右下角
+    const sStart = fromTL ? 0 : sBR;
+    const sEnd = fromTL ? sBR : P;
+
+    const duration = 1500;                    // 单次流光时长(ms)
+    const t0 = performance.now();
+
+    function step(now) {
+        const p = Math.min(1, (now - t0) / duration);
+        // 整体不透明度：前 12% 淡入、后 28% 淡出
+        let op = 1;
+        if (p < 0.12) op = p / 0.12;
+        else if (p > 0.72) op = (1 - p) / 0.28;
+        op = Math.max(0, op);
+
+        const sHead = sStart + (sEnd - sStart) * p;
+        for (let i = 0; i < dots.length; i++) {
+            const d = dots[i];
+            const rawS = sHead - i * TT_FLOW_SPACING;    // 越靠后越拖尾
+            if (rawS < sStart || rawS > sEnd) { d.style.opacity = 0; continue; }  // 未进入/已走完 → 隐藏
+            const pt = pointAt(rawS);
+            d.style.opacity = op * (1 - i / dots.length);   // 彗尾由亮到暗
+            d.style.transform =
+                `translate(${pt.x - TT_FLOW_SEG_LEN / 2}px, ${pt.y - 0.5}px) rotate(${pt.ang}deg)`;
+        }
+        if (p < 1) _ttFlowRaf = requestAnimationFrame(step);
+        else { for (const d of dots) d.style.opacity = 0; _ttFlowRaf = null; }
+    }
+    _ttFlowRaf = requestAnimationFrame(step);
+}
+
 // 📋 模组列表弹窗：Tooltip 悬浮 + 点击详情委托（packModsModal / currentEnabledModal 通用）
 function bindModsModalInteractions(modalId) {
     const modal = document.getElementById(modalId);
@@ -2009,7 +2320,10 @@ function bindModsModalInteractions(modalId) {
             if (tip) {
                 // 移到另一个模组 → 立即更新内容（否则 tooltip 会残留上一个模组的信息）
                 if (item !== _lastTooltipItem) {
-                    tip.innerHTML = item.dataset.tt;
+                    hideTooltipFlow();   // 取消上一个的进行中动画（旧节点即将被清掉）
+                    // 内容包进 .tt-content（文本裁剪/省略号），外层不裁剪以便流光压在边框上
+                    tip.innerHTML = `<div class="tt-content">${item.dataset.tt}</div>`;
+                    ensureTooltipFlow(tip);   // innerHTML 会清掉流光元素，需重新注入
                     _lastTooltipItem = item;
                 }
                 if (tip.style.display !== 'block') tip.style.display = 'block';
@@ -2045,6 +2359,7 @@ function positionModTooltip(e) {
 let _lastTooltipItem = null;  // 当前 tooltip 正在显示的模组元素（用于内容实时更新）
 function hideModTooltip() {
     _lastTooltipItem = null;
+    hideTooltipFlow();   // 熄灭流光并取消进行中的动画帧（全局计时照常运行）
     const tip = document.getElementById('modTooltip');
     if (tip) tip.style.display = 'none';
 }
@@ -2121,7 +2436,7 @@ async function openCurrentEnabled() {
     document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
     document.body.classList.remove('modal-open');
     new bootstrap.Modal(document.getElementById('currentEnabledModal')).show();
-    document.getElementById('currentEnabledList').innerHTML = '<span class="text-secondary">加载中...</span>';
+    document.getElementById('currentEnabledList').innerHTML = skeletonHtml(4);
     try {
         const res = await fetch('/api/current_enabled');
         const d = await res.json();
@@ -2384,6 +2699,8 @@ function showVersionMenu(versionId, x, y) {
     showContextMenu([
         { action: 'launchSpecial', label: '以「特殊加载配置」启动', icon: '<i class="fas fa-play me-2 text-success"></i>' },
         { sep: true },
+        { action: 'addPackToVersion', label: '添加整合包', icon: '<i class="fas fa-plus me-2 text-success"></i>' },
+        { action: 'viewVersionMods', label: '查看模组列表', icon: '<i class="fas fa-th-list me-2 text-info"></i>' },
         { action: 'openFolder', label: '打开当前版本文件夹', icon: '<i class="fas fa-folder-open me-2 text-warning"></i>' },
         { action: 'editVersion', label: '编辑版本', icon: '<i class="fas fa-pen me-2"></i>' },
         { action: 'deleteVersion', label: '删除版本', icon: '<i class="fas fa-trash-alt me-2 text-danger"></i>' },
@@ -2427,7 +2744,7 @@ function showModMenu(name, x, y, packId, versionId) {
 }
 
 function getModMeta(name) {
-    return (modMeta.mods || []).find(x => x.name === name) || null;
+    return modMetaIndex().get(name) || null;
 }
 
 function openModFolder(name, packId, versionId) {
@@ -2461,6 +2778,8 @@ function handleCtxAction(action) {
     if (!ctxData) return;
     if (ctxData.kind === 'version') {
         if (action === 'launchSpecial') launchSpecial(ctxData.versionId);
+        else if (action === 'addPackToVersion') openModal(ctxData.versionId);
+        else if (action === 'viewVersionMods') openVersionMods(ctxData.versionId);
         else if (action === 'openFolder') openVersionFolder();
         else if (action === 'editVersion') openVersionEdit(ctxData.versionId);
         else if (action === 'deleteVersion') deleteVersion(ctxData.versionId);
@@ -2519,7 +2838,10 @@ initTmodUpdateToggle();
 initTmodIgnorePreviewToggle();
 initSettingsModal();
 initModFilterEvents();
+initModsModalReset();      // 模组列表弹窗关闭时清空内容，避免下次打开瞬间闪出上次的残留
 initDesktopTitlebar();
 initContextMenu();
+startTooltipFlowLoop();   // 全局计时：tooltip 边框流光（与悬浮时机无关，持续每 2~5s 检查一次）
+startBootTextRotation();  // 启动遮罩文案轮播
 // 首次启动：版本号在后台预热检测（PowerShell ~4s），完成后再静默刷新一次显示
 setTimeout(loadData, 6000);

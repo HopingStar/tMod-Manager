@@ -2,7 +2,7 @@
 
 > 一个管理 **tModLoader 多版本启动**与**模组配置**的桌面启动器，为多版本玩家提供一站式管理。
 
-![版本](https://img.shields.io/badge/版本-v2.0.0-blueviolet)
+![版本](https://img.shields.io/badge/版本-v2.1.0-blueviolet)
 ![运行环境](https://img.shields.io/badge/运行环境-.NET%208-blue)
 ![许可证](https://img.shields.io/badge/License-MIT-green)
 
@@ -18,11 +18,15 @@
 
 ## 📥 下载与运行
 
-1. 到 **[GitHub Releases](https://github.com/HopingStar/tMod-Manager/releases)** 下载最新版 **`tModManager-v2.0.0-portable-win-x64.zip`**（Windows 64 位 · 便携绿色版）
+1. 到 **[GitHub Releases](https://github.com/HopingStar/tMod-Manager/releases)** 下载最新版 **`tModManager-v2.1.0-portable-win-x64.zip`**（Windows 64 位 · 便携绿色版）
 2. 解压到任意目录，双击 `tModManager.exe` 即可运行（绿色版，免安装）
 3. 首次启动自动在程序目录生成配置文件
 
 > **运行要求**：Windows 系统，需安装 **.NET 8 桌面运行时与 ASP.NET Core 运行时**（装「.NET Desktop Runtime 8.x」+「ASP.NET Core Runtime 8.x」即可）。
+
+## 📋 更新日志
+
+各版本变更详见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## ✨ 功能特性
 

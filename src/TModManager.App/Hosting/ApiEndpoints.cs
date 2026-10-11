@@ -296,7 +296,7 @@ public static class ApiEndpoints
         api.MapGet("/status", async (JsonStore store, ModsService mods, TmlProcessService procs) =>
         {
             var data = await store.ReadAsync();
-            string? versionName = null, packName = null, versionPath = null;
+            string? versionName = null, packName = null, versionPath = null, lastVersionId = null, lastPackId = null;
             if (data.LastLaunch != null)
             {
                 var v = data.Versions.FirstOrDefault(x => x.Id == data.LastLaunch.VersionId);
@@ -304,9 +304,11 @@ public static class ApiEndpoints
                 {
                     versionName = $"{v.Name} ({v.VersionInfo})";
                     versionPath = v.BatPath;
+                    lastVersionId = v.Id;                 // 供前端在版本卡片上标「上次启动 / 运行中」
                     var pid = data.LastLaunch.PackId;
                     if (pid != null)
                     {
+                        lastPackId = pid;
                         var p = mods.GetGlobalPacks(data).FirstOrDefault(x => x.Id == pid);
                         if (p != null) packName = p.Name;
                     }
@@ -333,6 +335,8 @@ public static class ApiEndpoints
                 version_name = versionName,
                 pack_name = packName,
                 version_path = versionPath,
+                version_id = lastVersionId,
+                pack_id = lastPackId,
                 missing_versions = missingVersions,
                 missing_packs = missingPacks,
             };
@@ -395,6 +399,9 @@ public static class ApiEndpoints
 
         // ---- 模组元数据（本地逆向优先；Steam 补全在阶段 5 接入）----
         api.MapGet("/mod_meta", async (ModsService mods) => await mods.BuildModMetaAsync());
+
+        // 刷新进度（前端在点击「刷新模组元数据」期间轮询）
+        api.MapGet("/mod_meta/progress", (ModsService mods) => Results.Ok(mods.Progress.Snapshot()));
 
         api.MapPost("/mod_meta/refresh", async (HttpRequest req, ModsService mods) =>
         {
@@ -606,12 +613,23 @@ public static class ApiEndpoints
 
     /// <summary>在资源管理器中定位并选中文件。explorer.exe 是受保护进程(PPL)，
     /// .NET Process.Start 启动它时会因无法获取进程句柄而抛「拒绝访问」，
-    /// 故改用 ShellExecute 直接交给 shell（不持有 explorer 句柄）；失败则兜底打开所在目录。</summary>
+    /// 故改用 ShellExecute 直接交给 shell（不持有 explorer 句柄）；失败则兜底打开所在目录。
+    /// ⚠️ 路径必须先规范化为反斜杠绝对路径：配置里的 bat_path 等存的是正斜杠（F:/games/…），
+    /// 由此推导出的 workshop 模组路径也带正斜杠，而 explorer /select 认不出正斜杠路径，
+    /// 会退化成「只打开文件夹、不选中文件」。</summary>
     private static void OpenInExplorerSelect(string path)
     {
-        var hr = ShellExecute(IntPtr.Zero, "open", "explorer.exe", $"/select,\"{path}\"", null, 1);
+        string full;
+        try { full = Path.GetFullPath(path).Replace('/', '\\'); }
+        catch { full = path; }
+
+        var hr = ShellExecute(IntPtr.Zero, "open", "explorer.exe", $"/select,\"{full}\"", null, 1);
         if (hr.ToInt64() <= 32)   // ShellExecute 返回值 <=32 表示错误（SE_ERR_*）
-            Process.Start(new ProcessStartInfo { FileName = Path.GetDirectoryName(path)!, UseShellExecute = true });
+        {
+            var dir = Path.GetDirectoryName(full);
+            if (!string.IsNullOrEmpty(dir))
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+        }
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

@@ -11,7 +11,7 @@ public class TmodParserTests
     public void Parse_UncompressedEntries_ReturnsMeta()
     {
         var icon = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
-        var bytes = BuildTmod("TestMod", "1.2.3", "Test Mod Display", "Alice", icon, compressInfo: false);
+        var bytes = BuildTmod("TestMod", "1.2.3", "Test Mod Display", "Alice", icon, compressInfo: false, description: "A test mod");
         using var tmp = new TestPaths();
         var file = Path.Combine(tmp.BaseDir, "TestMod.tmod");
         File.WriteAllBytes(file, bytes);
@@ -23,13 +23,16 @@ public class TmodParserTests
         Assert.Equal("Test Mod Display", meta.DisplayName);
         Assert.Equal("Alice", meta.Author);
         Assert.Equal("1.2.3", meta.Version);
+        Assert.Equal("A test mod", meta.Description);
         Assert.Equal(icon, meta.IconBytes);
     }
 
     [Fact]
     public void Parse_DeflatedInfoEntry_ReturnsMeta()
     {
-        var bytes = BuildTmod("DefMod", "9.9", "Def Mod", "Bob", new byte[] { 1, 2, 3 }, compressInfo: true);
+        // 用足够长的可压缩描述，确保 deflate 后 clen < ulen（否则解析器按未压缩处理）
+        var desc = "This is a longer mod description with enough repeated text to actually compress when deflated. ".PadRight(200, 'x');
+        var bytes = BuildTmod("DefMod", "9.9", "Def Mod", "Bob", new byte[] { 1, 2, 3 }, compressInfo: true, description: desc);
         using var tmp = new TestPaths();
         var file = Path.Combine(tmp.BaseDir, "DefMod.tmod");
         File.WriteAllBytes(file, bytes);
@@ -40,6 +43,7 @@ public class TmodParserTests
         Assert.Equal("Def Mod", meta.DisplayName);
         Assert.Equal("Bob", meta.Author);
         Assert.Equal("9.9", meta.Version);
+        Assert.Equal(desc, meta.Description);
     }
 
     [Fact]
@@ -86,9 +90,9 @@ public class TmodParserTests
 
     // ---- 合成 .tmod 构建器（与 TmodParser 格式一一对应） ----
 
-    private static byte[] BuildTmod(string name, string version, string displayName, string author, byte[] icon, bool compressInfo)
+    private static byte[] BuildTmod(string name, string version, string displayName, string author, byte[] icon, bool compressInfo, string description = "")
     {
-        var infoRaw = BuildInfo("displayName", displayName, "author", author, "version", version);
+        var infoRaw = BuildInfo("displayName", displayName, "author", author, "version", version, "description", description);
         var info = compressInfo ? Deflate(infoRaw) : infoRaw;
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);

@@ -21,6 +21,16 @@ body {
     -webkit-user-select: none;
 }
 
+/* 所有图片：禁止拖拽、禁止选中（模组图标 / 启动 logo 等） */
+img {
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 /* 输入框 / 文本域始终允许编辑选择（禁选不影响录入） */
 input,
 textarea,
@@ -54,6 +64,7 @@ textarea,
 }
 
 .version-card {
+    position: relative;               /* 供左上角「上次启动 / 运行中」角标定位 */
     border-left: 4px solid #0d6efd;
 }
 
@@ -123,11 +134,11 @@ textarea,
     background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(99, 102, 241, 0.5);   /* 主题靛蓝 */
     border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(99, 102, 241, 0.85);
 }
 
 /* 整合包标签（列表项） */
@@ -223,6 +234,9 @@ textarea,
     transition: color 0.2s ease, transform 0.2s ease;
 }
 .icon-btn:hover { color: #0dcaf0; transform: scale(1.15); }
+/* 版本卡片右上角「添加整合包」图标按钮：绿色（语义同新增） */
+.icon-btn.add-pack { color: #3fbf6a; }
+.icon-btn.add-pack:hover { color: #6ee49a; }
 
 /* 整合包视图：每个整合包一个横向长条卡片 */
 .pack-bar {
@@ -316,6 +330,9 @@ textarea,
     margin-bottom: 2px;
     transition: background 0.15s ease;
     overflow: hidden;
+    /* 长列表性能：视口外的条目跳过布局与绘制（Chromium 85+），打开数百条模组时明显更顺 */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 46px;
 }
 /* 第一行：图标 + 名称（省略号）；徽章在模组名下开始（对齐模组名，不从图标开始） */
 .mod-item-main {
@@ -332,6 +349,28 @@ textarea,
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* 版本模组列表：图标右侧第二行（模组 id 淡色显示 + 可选 chip 内联其后） */
+.mod-item-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 1.35;
+}
+.mod-item-id {
+    font-size: 0.76rem;
+    opacity: 0.6;          /* 淡色：跟随所在行颜色（启用绿 / 未启用灰 / 缺失红） */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mod-item-sub .mod-conflict-badge,
+.mod-item-sub .mod-update-badge {
+    display: inline-block;
+    margin: 0;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
 .mod-item.enabled { color: #75e6a5; }
 /* 已启用模组：内部名（id）也显示为绿色（Bootstrap .text-secondary 带 !important，需同级别覆盖） */
 .mod-item.enabled .mod-item-label .text-secondary { color: inherit !important; }
@@ -339,6 +378,7 @@ textarea,
 .mod-item.disabled { color: #8a93a1; }
 .mod-item.disabled:hover { background: rgba(255, 255, 255, 0.06); }
 .mod-item.missing { color: #f19b9b; text-decoration: line-through; }
+.mod-item.missing:hover { background: rgba(220, 53, 69, 0.16); }   /* 缺失模组悬浮：淡红底 */
 
 /* 模组图标（Steam 封面图缩略） */
 .mod-icon, .special-mod .mod-icon {
@@ -587,7 +627,9 @@ body[data-desktop="true"] #appFrame {
     bottom: 0;
     display: flex;
     flex-direction: column;
-    background: radial-gradient(circle at 10% 20%, #1a1a2e, #16213e);
+    /* 透明：背景渐变由 html::before 提供（同样是 at 10% 20% 的 #1a1a2e→#16213e）。
+       此处若再铺一层不透明背景，会把 z-index:-1 的背景光晕（html::after）整块盖住。 */
+    background: transparent;
     overflow: hidden;
 }
 /* 标题栏：位于边框容器内顶部（含标题栏的整个界面边缘都被框住） */
@@ -706,6 +748,8 @@ body[data-desktop="true"] #desktopShell {
 
 /* ---------- 模组列表弹窗：高度固定为窗口高度的 92%，不随模组数量伸缩 ---------- */
 #packModsModal .modal-dialog {
+    width: 1050px;                  /* 左右宽度（原 1200px） */
+    max-width: 1050px;
     height: 92vh;
     max-height: 92vh;
     min-height: 0 !important;       /* 覆盖 bootstrap .modal-dialog-centered 的 min-height 撑满 */
@@ -737,7 +781,8 @@ body[data-desktop="true"] #desktopShell {
 }
 #packModsModal .col-md-4,
 #packModsModal .col-md-6,
-#packModsModal .col-md-8 {
+#packModsModal .col-md-8,
+#packModsModal .col-12 {          /* 版本模组列表：单列模式也用同一套「列内滚动」布局 */
     height: 100%;        /* 固定列高 = row 高度，否则列被内容撑高、列表永不溢出 */
     display: flex;
     flex-direction: column;
@@ -745,7 +790,8 @@ body[data-desktop="true"] #desktopShell {
 }
 #packModsModal .col-md-4 h6,
 #packModsModal .col-md-6 h6,
-#packModsModal .col-md-8 h6 {
+#packModsModal .col-md-8 h6,
+#packModsModal .col-12 h6 {
     flex-shrink: 0;
 }
 /* 三列列表：高度随模组数量自然伸长；内容超过弹窗空间时才压缩到底部并滚动 */
@@ -850,9 +896,12 @@ body[data-desktop="true"] #desktopShell {
     border: 1px solid rgba(255, 152, 0, 0.55);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;   /* 不裁剪：让流光能压在边框线上（文本裁剪下沉到 .tt-content） */
     pointer-events: none;
+}
+.mod-tooltip .tt-content {
+    overflow: hidden;      /* 保留长文本省略号，同时不影响外层流光的绘制 */
+    text-overflow: ellipsis;
 }
 .mod-tooltip .tt-ver {
     color: #ff9800;
@@ -881,6 +930,28 @@ body[data-desktop="true"] #desktopShell {
     border-radius: 8px;
     padding: 0 6px;
     line-height: 1.4;
+}
+/* 边框流光：彗尾由多段短光带拼成，沿「圆角矩形」路径顺时针流动
+   （JS 驱动，随机方向 / 随机 2~5s 触发）。每段按所在处切向旋转，
+   转弯时自然弯过圆角、不戳出边框；粗细与边框一致（1px）、中心压在边框线上。 */
+.mod-tooltip .tt-flow {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+}
+.mod-tooltip .tt-flow-dot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 7px;
+    height: 1px;               /* 与边框同粗 */
+    border-radius: 1px;
+    background: #ffe9b8;
+    box-shadow: 0 0 5px 0 rgba(255, 190, 70, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    will-change: transform, opacity;
 }
 
 /* 模组详情弹窗浮在所有其它弹窗之上（如「当前 enabled.json」弹窗） */
@@ -1106,3 +1177,243 @@ body[data-desktop="true"] #desktopShell {
 @keyframes toastOut {
     to { transform: translateY(-120%); opacity: 0; }
 }
+
+/* ==================== 界面动效 ==================== */
+
+/* ① 点击回弹（按住时轻微缩小） */
+.neon-btn:active,
+.icon-btn:active,
+.fav-btn:active,
+.settings-nav-item:active,
+.btn:active,
+.btn-close:active {
+    transform: scale(0.96);
+    transition: transform 0.08s ease;
+}
+.btn-close:active { transform: scale(0.88); }
+
+/* ② 视图切换淡入 */
+.view-fade {
+    animation: viewFadeIn 0.28s ease-out;
+}
+@keyframes viewFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ③ 模态框：Bootstrap 默认淡入之上，内容再轻微上浮。
+   用独立的 translate 属性（非 transform），避免与 .glass-card:hover 的 transform 互相覆盖 */
+.modal.fade .modal-content {
+    opacity: 0;
+    translate: 0 10px;
+    transition: opacity 0.25s ease, translate 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.modal.show .modal-content {
+    opacity: 1;
+    translate: 0 0;
+}
+
+/* ④ 背景光晕缓慢漂移（默认开；可在「全局设置 → 界面外观」关闭）
+   独立 ::after 图层 + 合成层 transform，不动 background，避免整屏软件重绘 */
+html::after {
+    content: "";
+    position: fixed;
+    inset: -12%;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    background:
+        radial-gradient(circle 46vmax at 20% 24%, rgba(13, 110, 253, 0.34), transparent 68%),
+        radial-gradient(circle 40vmax at 80% 76%, rgba(13, 202, 240, 0.26), transparent 68%),
+        radial-gradient(circle 34vmax at 68% 14%, rgba(139, 92, 246, 0.22), transparent 70%);
+}
+html.bg-glow-on::after {
+    opacity: 1;
+    animation: bgGlowDrift 40s ease-in-out infinite alternate;
+    will-change: transform, opacity;
+}
+@keyframes bgGlowDrift {
+    from { transform: translate3d(-4%, -2.5%, 0) scale(1); }
+    to   { transform: translate3d(4%, 3%, 0) scale(1.16); }
+}
+
+/* ⑤-a 运行中的版本卡片：橙色边框 + 呼吸辉光 */
+.version-card.is-running {
+    border-left-color: #ff9800;
+    animation: cardBreath 2s ease-in-out infinite;
+}
+@keyframes cardBreath {
+    0%, 100% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                    0 0 0 1px rgba(255, 152, 0, 0.35),
+                    0 0 14px rgba(255, 152, 0, 0.18);
+    }
+    50% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                    0 0 0 1px rgba(255, 152, 0, 0.75),
+                    0 0 28px rgba(255, 152, 0, 0.45);
+    }
+}
+
+/* ⑤-b 「上次启动 / 运行中」角标：卡片左上角起点，默认隐藏 */
+.last-launch-badge {
+    display: none;
+    padding: 1px 9px;
+    margin-right: 8px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    line-height: 1.6;
+    color: #06121f;
+    background: linear-gradient(135deg, #4da3ff, #8ed8ff);
+    border-radius: 20px;
+    box-shadow: 0 2px 10px rgba(77, 163, 255, 0.45);
+    vertical-align: 1px;
+    pointer-events: none;
+}
+.version-card.is-last .last-launch-badge { display: inline-block; }
+.version-card.is-running .last-launch-badge {
+    color: #2a1400;
+    background: linear-gradient(135deg, #ff9800, #ffc46b);
+    box-shadow: 0 2px 10px rgba(255, 152, 0, 0.5);
+}
+
+/* ⑥ 模组图标统一占位方块（图标缺失/加载失败时显示立方体，不再塌陷） */
+.mod-icon-slot {
+    position: relative;
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    margin-right: 6px;
+    vertical-align: -5px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+}
+.mod-icon-slot .mod-icon {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border-radius: 0;
+    vertical-align: baseline;
+    background: transparent;
+}
+.mod-icon-slot .mod-icon-ph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #7f8ea3;
+}
+/* 模组列表弹窗里图标更大（32px），slot 跟随该上下文 */
+.mods-list .mod-icon-slot {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    vertical-align: -7px;
+}
+.mods-list .mod-icon-slot .mod-icon-ph { font-size: 14px; }
+
+/* ==================== 细节打磨 ==================== */
+
+/* ① 计数变化弹跳（模组数 / 已选数等） */
+.count-bump {
+    display: inline-block;
+    animation: countBump 0.32s ease-out;
+}
+@keyframes countBump {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.45); }
+    100% { transform: scale(1); }
+}
+
+/* ② 卡片错峰淡入（animation-delay 由 JS 逐个写成 --d） */
+.stagger-in {
+    animation: cardIn 0.34s ease-out both;
+    animation-delay: var(--d, 0ms);
+}
+@keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ③ 骨架屏（列表加载占位，带 shimmer 流光） */
+.skeleton-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 2px 0;
+}
+.skeleton-row {
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+.skeleton-row::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+    animation: skeletonShimmer 1.25s ease-in-out infinite;
+}
+@keyframes skeletonShimmer { to { transform: translateX(100%); } }
+
+/* ④ 空状态（大号淡色图标 + 标题 + 说明 + 可选引导按钮） */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 30px 16px;
+    text-align: center;
+    color: #7f8ea3;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.015);
+}
+/* 刷新模组元数据：按钮左侧的进度指示 */
+.meta-refresh-progress {
+    font-size: 0.8rem;
+    color: #9db0c8;
+    white-space: nowrap;
+}
+.meta-refresh-progress .meta-refresh-num {
+    color: #0dcaf0;
+    font-variant-numeric: tabular-nums;   /* 数字等宽，跳动时不抖 */
+}
+/* 通用旋转动画：FontAwesome 的 .fa-spin 会被本机 prefers-reduced-motion 守卫停掉（只转 1ms），
+   故自绘一个不受该守卫影响的旋转动画 */
+@keyframes uiSpin { to { transform: rotate(360deg); } }
+.ui-spin { display: inline-block; animation: uiSpin 1s linear infinite; }
+
+/* 行内紧凑空状态（卡片内的小段提示） */
+.empty-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    color: #7f8ea3;
+    font-size: 0.84rem;
+}
+.empty-inline i { opacity: 0.5; }
+.empty-state > i {
+    font-size: 34px;
+    opacity: 0.32;
+    margin-bottom: 3px;
+}
+.empty-state .empty-title { font-size: 0.92rem; font-weight: 600; color: #9aa7b8; }
+.empty-state .empty-desc  { font-size: 0.79rem; opacity: 0.85; }
+.empty-state .empty-action { margin-top: 9px; }
+/* 列表内嵌的空状态：更紧凑 */
+.mods-list .empty-state { padding: 20px 12px; }
+.mods-list .empty-state > i { font-size: 26px; }
