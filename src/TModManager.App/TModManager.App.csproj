@@ -35,6 +35,12 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>tModManager</AssemblyName>
+    <!-- 程序集元数据（exe 属性 → 详细信息 里能看到）：
+         Copyright 同时写明作者与协议，和 LICENSE / SPDX 头保持一致 -->
+    <Product>tModManager</Product>
+    <Company>HopingStar</Company>
+    <Description>tModLoader 多版本与模组管理工具</Description>
+    <Copyright>Copyright (C) 2026 HopingStar · GPL-3.0-only</Copyright>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
