@@ -22,6 +22,12 @@ public sealed class SaveEntry
 
     /// <summary>该存档已有的备份数量。</summary>
     public int BackupCount { get; set; }
+
+    /// <summary>世界存档的内部信息（仅 <see cref="Kind"/> == world 且能解析时非空）。</summary>
+    public WorldDetails? World { get; set; }
+
+    /// <summary>人物存档的内部信息（仅 <see cref="Kind"/> == player 且能解析时非空）。</summary>
+    public PlayerDetails? Player { get; set; }
 }
 
 /// <summary>一份备份记录。</summary>
@@ -132,7 +138,26 @@ public sealed class SavesService
             {
                 var fi = new FileInfo(f);
                 var fileStem = Path.GetFileNameWithoutExtension(f);
-                var internalName = nameReader(f);
+
+                // 直接解析完整头部：既能拿到「游戏里显示的名字」，也把难度 / 大小 / 腐化猩红等一并读出来。
+                // 解析失败（旧格式 / 损坏 / 被游戏独占）时退回只读名字的轻量解析，再不行用文件名。
+                string? internalName = null;
+                WorldDetails? world = null;
+                PlayerDetails? player = null;
+
+                if (kind == "world")
+                {
+                    world = SaveDetailsReader.TryReadWorld(f);
+                    internalName = world?.Name;
+                }
+                else
+                {
+                    player = SaveDetailsReader.TryReadPlayer(f);
+                    internalName = player?.Name;
+                }
+
+                if (string.IsNullOrWhiteSpace(internalName)) internalName = nameReader(f);
+
                 list.Add(new SaveEntry
                 {
                     Kind = kind,
@@ -142,6 +167,8 @@ public sealed class SavesService
                     Path = fi.FullName,
                     Size = fi.Length,
                     Modified = fi.LastWriteTime,
+                    World = world,
+                    Player = player,
                 });
             }
             catch { }

@@ -1567,6 +1567,25 @@ html.bg-glow-on::after {
 .save-main { min-width: 0; }
 .save-name { font-weight: 600; font-size: 0.92rem; }
 .save-meta { font-size: 0.75rem; color: #9db0c8; word-break: break-all; }
+.save-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.save-badge {
+    display: inline-flex; align-items: center; white-space: nowrap;
+    font-size: 0.68rem; line-height: 1.5; padding: 1px 7px; border-radius: 999px;
+    color: #c3b5ff; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.save-badge.is-small, .save-badge.is-medium, .save-badge.is-large,
+.save-badge.is-classic, .save-badge.is-unknown { color: #9db0c8; }
+.save-badge.is-expert { color: #ffd166; border-color: rgba(255, 209, 102, 0.45); background: rgba(255, 209, 102, 0.10); }
+.save-badge.is-master { color: #ff9f43; border-color: rgba(255, 159, 67, 0.50); background: rgba(255, 159, 67, 0.12); }
+.save-badge.is-journey { color: #5ee0c0; border-color: rgba(94, 224, 192, 0.45); background: rgba(94, 224, 192, 0.10); }
+.save-badge.is-crimson { color: #ff8a8a; border-color: rgba(220, 53, 69, 0.50); background: rgba(220, 53, 69, 0.12); }
+.save-badge.is-corrupt { color: #b38cff; border-color: rgba(138, 93, 255, 0.50); background: rgba(138, 93, 255, 0.12); }
+.save-badge.is-hardmode { color: #ff6b6b; border-color: rgba(255, 107, 107, 0.45); background: rgba(255, 107, 107, 0.10); }
+.save-badge.is-hardcore { color: #ff5d5d; border-color: rgba(255, 93, 93, 0.50); background: rgba(255, 93, 93, 0.12); }
+.save-badge.is-mediumcore { color: #ffb020; border-color: rgba(255, 176, 32, 0.45); background: rgba(255, 176, 32, 0.10); }
+.save-badge.is-seed { color: #7fd3ff; border-color: rgba(13, 202, 240, 0.40); background: rgba(13, 202, 240, 0.08); }
+.save-badge.is-time, .save-badge.is-life, .save-badge.is-mana { color: #9db0c8; }
+.save-detail { font-size: 0.70rem; color: #7f8fa6; margin-top: 3px; word-break: break-all; }
 .save-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ---- 游玩统计 ---- */
@@ -1696,6 +1715,8 @@ html[data-theme="light"] .stats-recent-row,
 html[data-theme="light"] .stat-card { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
 html[data-theme="light"] .save-meta,
 html[data-theme="light"] .stat-label { color: #6b7688; }
+html[data-theme="light"] .save-badge { color: #4b5568; background: rgba(15, 23, 42, 0.04); border-color: rgba(15, 23, 42, 0.12); }
+html[data-theme="light"] .save-detail { color: #6b7688; }
 html[data-theme="light"] .stat-value { color: #5b46c8; }
 html[data-theme="light"] .stats-cell { color: #0a7ea4; }
 

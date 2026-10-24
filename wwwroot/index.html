@@ -508,6 +508,7 @@
                             <button type="button" class="settings-nav-item" data-stab="modlist" title="模组列表中直接展示的信息"><i class="fas fa-th-list me-2"></i>模组列表显示</button>
                             <button type="button" class="settings-nav-item" data-stab="tooltip" title="悬浮模组时浮动框里显示的信息"><i class="fas fa-comment-dots me-2"></i>Tooltip 信息</button>
                             <button type="button" class="settings-nav-item" data-stab="global" title="全局优先加载 workshop 模组（禁用本地同名模组）"><i class="fas fa-sliders-h me-2"></i>全局特殊配置</button>
+                            <button type="button" class="settings-nav-item" data-stab="launch" title="启动游戏后启动器窗口的行为与退出通知"><i class="fas fa-rocket me-2"></i>启动行为</button>
                             <button type="button" class="settings-nav-item" data-stab="appearance" title="界面动效开关"><i class="fas fa-palette me-2"></i>界面外观</button>
                             <button type="button" class="settings-nav-item" data-stab="about" title="软件信息、作者与项目主页"><i class="fas fa-info-circle me-2"></i>关于</button>
                         </div>
@@ -620,6 +621,23 @@
                                 <div class="text-secondary small mb-2">点击模组可选中 / 取消（选中 = 禁用本地模组，优先加载 workshop 版本）</div>
                                 <div id="s_globalSpecialMods" class="special-mods-list"></div>
                                 <div id="s_globalSpecialEmpty" class="empty-inline mt-2" style="display:none;"><i class="fas fa-inbox"></i><span>Mods 目录未检测到 .tmod 文件</span></div>
+                            </div>
+                            <!-- 板块：启动行为 -->
+                            <div class="settings-pane" id="sp-launch" style="display:none;">
+                                <div class="settings-pane-title">🚀 启动行为</div>
+                                <div class="settings-pane-desc">控制用启动器启动游戏后，启动器窗口如何处理，以及游戏退出时是否提醒。</div>
+                                <div class="settings-sub-title">启动游戏后</div>
+                                <div class="btn-group w-100 mb-2" role="group" id="launchWindowSwitch">
+                                    <button type="button" class="btn btn-outline-info neon-btn" data-launch-window="keep"><i class="fas fa-window-restore me-1"></i>不隐藏</button>
+                                    <button type="button" class="btn btn-outline-info neon-btn" data-launch-window="hide"><i class="fas fa-eye-slash me-1"></i>隐藏，游戏退出后显示</button>
+                                </div>
+                                <div class="text-secondary small mb-3">选择「隐藏」时，启动器会在<strong>确认游戏进程已启动</strong>后才隐藏；游戏退出后自动恢复显示，不会出现窗口消失却找不到的情况。</div>
+                                <div class="settings-sub-title">退出通知</div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="s_exitNotifyToggle" data-mskey="exit_notify">
+                                    <label class="form-check-label fw-bold" for="s_exitNotifyToggle">游戏退出时显示通知</label>
+                                </div>
+                                <div class="text-secondary small">通知显示在屏幕右下角。正常退出会显示本次游玩时长；异常退出会从日志里判断疑似原因（缺前置模组、版本不匹配、内存不足等），并可一键打开日志。</div>
                             </div>
                             <!-- 板块：界面外观 -->
                             <div class="settings-pane" id="sp-appearance" style="display:none;">

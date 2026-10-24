@@ -32,7 +32,7 @@ public partial class MainWindow : Window
         _port = port;
         _store = new JsonStore(paths);
         _bridge = new PyWebViewBridge(this);
-        windowControl.RegisterShow(EnsureShown);
+        windowControl.RegisterWindow(EnsureShown, HideForGame);
 
         // 全屏（工作区最大化）时 WebView2 顶到窗口边缘（界面贴满屏幕、无背景板、禁缩放）；
         // 还原后恢复 4px 内缩作为边缘缩放命中区。回调在 UI 线程触发。
@@ -148,13 +148,28 @@ public partial class MainWindow : Window
         return 0;
     }
 
-    /// <summary>显示窗口（幂等，供 /api/ready 或兜底调用）。</summary>
+    /// <summary>
+    /// 显示窗口（幂等）。除了首次显示，也负责「启动后隐藏 → 游戏退出后恢复」这条路径 ——
+    /// 所以不能因为 <c>_shown</c> 已为真就直接 return。
+    /// </summary>
     public void EnsureShown()
     {
-        if (_shown) return;
-        _shown = true;
-        Show();
+        if (!_shown)
+        {
+            _shown = true;
+            Show();
+        }
+        else if (!IsVisible)
+        {
+            Show();
+        }
         Activate();
+    }
+
+    /// <summary>「启动后隐藏」：游戏进程确认启动后由 WindowControlService 调到这里。</summary>
+    private void HideForGame()
+    {
+        if (IsVisible) Hide();
     }
 
     /// <summary>把当前窗口尺寸写入 data.json（window_size），供下次启动恢复。</summary>

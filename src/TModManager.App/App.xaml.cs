@@ -45,7 +45,10 @@ public partial class App : Application
         }
 
         // 1) 解析路径 + 首启预置（数据与前端）
-        var paths = AppPaths.Resolve(AppContext.BaseDirectory);
+        //    单文件版里 AppContext.BaseDirectory 是运行时解压目录，
+        //    数据要落在用户双击的那个 exe 旁边（Environment.ProcessPath）。
+        var realExeDir = System.IO.Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+        var paths = AppPaths.Resolve(AppContext.BaseDirectory, realExeDir);
         AppPaths.Current = paths;
         AppLog.Init(paths);
         new FirstRunProvisioner(paths).Provision();

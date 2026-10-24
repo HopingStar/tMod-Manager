@@ -12,9 +12,11 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
-  <!-- 发布时把仓库根 wwwroot 一并带出（单文件模式 BaseDir=exe 目录，静态文件从 exe 旁 wwwroot 读） -->
+  <!-- 发布时把仓库根 wwwroot 一并带出（单文件模式 BaseDir=exe 目录，静态文件从 exe 旁 wwwroot 读）。
+       ⚠️ 必须排除 static/mod_icons：那是运行时从玩家模组抓取的图标缓存（开发目录里攒了几百个），
+       既不该进发布包，更不该被单文件版嵌进 exe。程序启动时会自己重建这个目录。 -->
   <ItemGroup>
-    <Content Include="..\..\wwwroot\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\wwwroot\**\*" Exclude="..\..\wwwroot\static\mod_icons\**" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- GPL-3.0 分发二进制时须随附协议全文：把仓库根的 LICENSE 放到 exe 旁边并打进发布包 -->

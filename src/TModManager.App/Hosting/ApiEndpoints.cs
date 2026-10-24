@@ -481,7 +481,7 @@ public static class ApiEndpoints
         });
 
         // ---- 状态 / 操作 ----
-        api.MapGet("/status", async (JsonStore store, ModsService mods, TmlProcessService procs) =>
+        api.MapGet("/status", async (JsonStore store, ModsService mods, TmlProcessService procs, ExitReportService exits) =>
         {
             var data = await store.ReadAsync();
             string? versionName = null, packName = null, versionPath = null, lastVersionId = null, lastPackId = null;
@@ -529,6 +529,8 @@ public static class ApiEndpoints
                 pack_id = lastPackId,
                 missing_versions = missingVersions,
                 missing_packs = missingPacks,
+                // 最近一次游戏退出报告（含崩溃归因）；前端按 id 判断是否是新的一条
+                last_exit = exits.Last,
             };
         });
 
@@ -615,7 +617,7 @@ public static class ApiEndpoints
         });
 
         // ---- 启动整合包 / 直接启动 ----
-        api.MapPost("/versions/{versionId}/launch/{packId}", async (string versionId, string packId, TmlProcessService procs, ModsService mods, SpecialLoadService special, StatsService stats, SnapshotService snapshots, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch/{packId}", async (string versionId, string packId, TmlProcessService procs, ModsService mods, SpecialLoadService special, StatsService stats, SnapshotService snapshots, JsonStore store, WindowControlService wc) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -655,6 +657,8 @@ public static class ApiEndpoints
             var spSet = special.PackSpecialSet(data, packId).OrderBy(x => x, StringComparer.Ordinal).ToList();
             try
             {
+                // 启动后隐藏：只登记，由监控服务确认游戏进程起来后再隐藏
+                if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
                 {
@@ -679,12 +683,13 @@ public static class ApiEndpoints
             }
             catch (Exception e)
             {
+                wc.CancelPendingHide();
                 if (snapshot != null) snapshots.Restore(snapshot.Id, modsDir);
                 return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500);
             }
         });
 
-        api.MapPost("/launch_current", async (TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store) =>
+        api.MapPost("/launch_current", async (TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store, WindowControlService wc) =>
         {
             var data = await store.ReadAsync();
             var last = data.LastLaunch;
@@ -702,16 +707,21 @@ public static class ApiEndpoints
                     spErrors = special.ApplyDisabledSet(last.Disabled.ToHashSet(StringComparer.Ordinal));
                 else if (!string.IsNullOrEmpty(last.PackId))
                     spErrors = special.ApplyDisabledSet(special.PackSpecialSet(data, last.PackId));
+                if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await stats.RecordLaunchAsync(last.VersionId, last.PackId);   // 游玩统计
                 var message = $"已用上次的启动方式启动（{version.Name}）";
                 if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
                 return Results.Ok(new { message });
             }
-            catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
+            catch (Exception e)
+            {
+                wc.CancelPendingHide();
+                return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500);
+            }
         });
 
-        api.MapPost("/versions/{versionId}/launch_direct", async (string versionId, TmlProcessService procs, StatsService stats, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch_direct", async (string versionId, TmlProcessService procs, StatsService stats, JsonStore store, WindowControlService wc) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -720,6 +730,7 @@ public static class ApiEndpoints
             if (!File.Exists(version.BatPath)) return Results.Json(new { error = "启动文件不存在" }, statusCode: 400);
             try
             {
+                if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
                 {
@@ -729,12 +740,16 @@ public static class ApiEndpoints
                 await stats.RecordLaunchAsync(versionId, null);   // 游玩统计
                 return Results.Ok(new { message = $"已直接启动（{version.Name}），使用当前 enabled.json" });
             }
-            catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
+            catch (Exception e)
+            {
+                wc.CancelPendingHide();
+                return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500);
+            }
         });
 
         // 「以特殊加载配置启动」：应用全局特殊加载配置（禁用列表内本地模组、优先 workshop 版本）后启动该版本。
         // 退出 tML 时自动还原全部 .tmod.disabled（TmlMonitorService.RestoreAllDisabled）。
-        api.MapPost("/versions/{versionId}/launch_special", async (string versionId, TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch_special", async (string versionId, TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store, WindowControlService wc) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -748,6 +763,7 @@ public static class ApiEndpoints
             try
             {
                 var spErrors = special.ApplyDisabledSet(disabledSet);
+                if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
                 {
@@ -760,7 +776,11 @@ public static class ApiEndpoints
                 if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
                 return Results.Ok(new { message });
             }
-            catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
+            catch (Exception e)
+            {
+                wc.CancelPendingHide();
+                return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500);
+            }
         });
 
         api.MapGet("/current_enabled", async (ModsService mods) =>

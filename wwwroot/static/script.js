@@ -46,6 +46,9 @@ let showTooltipSize = true;      // 显示大小（💾）
 let showTooltipCreated = true;   // 显示创建时间（📅）
 // 界面外观
 let bgGlow = true;               // 背景光晕缓慢漂移（默认开启，可在「全局设置 → 界面外观」关闭）
+// 启动行为（meta_settings 持久化）
+let launchWindowMode = 'keep';   // keep = 启动后不隐藏；hide = 启动后隐藏、游戏退出后显示
+let exitNotify = true;           // 游戏退出时在右下角弹通知
 // 启动状态（来自 /api/status）：用于在版本卡片上标「上次启动 / 运行中」
 let tmodRunning = false;
 let _lastVersionsSig = '';       // 版本集合签名：集合变了才播放错峰入场动画
@@ -1085,6 +1088,12 @@ function initSettingsModal() {
         applyBgGlow();
         saveMetaSetting('bg_glow', bgGlow);
     });
+    // 退出通知开关（同样不走 bindMetaSwitch：与模组列表无关）
+    const exitT = document.getElementById('s_exitNotifyToggle');
+    if (exitT) exitT.addEventListener('change', () => {
+        exitNotify = exitT.checked;
+        saveMetaSetting('exit_notify', exitNotify);
+    });
     bindMetaSwitch('tmod_update', () => tmodUpdateCheck, v => { tmodUpdateCheck = v; });
     bindMetaSwitch('tmod_update_ignore_preview', () => tmodUpdateIgnorePreview, v => { tmodUpdateIgnorePreview = v; });
     bindMetaSwitch('show_tags', () => showTags, v => { showTags = v; });
@@ -1876,6 +1885,8 @@ function applyMetaSettings(ms) {
     if (typeof ms.tmod_update === 'boolean') tmodUpdateCheck = ms.tmod_update;
     if (typeof ms.tmod_update_ignore_preview === 'boolean') tmodUpdateIgnorePreview = ms.tmod_update_ignore_preview;
     if (typeof ms.bg_glow === 'boolean') { bgGlow = ms.bg_glow; applyBgGlow(); }
+    if (typeof ms.launch_window === 'string') launchWindowMode = ms.launch_window === 'hide' ? 'hide' : 'keep';
+    if (typeof ms.exit_notify === 'boolean') exitNotify = ms.exit_notify;
     if (typeof ms.theme === 'string') { themeMode = ms.theme; applyTheme(); }
     const sync = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
     // 全局设置弹窗里的开关（data-mskey 驱动，与特殊加载弹窗里的旧 ID 开关并行）
@@ -1897,6 +1908,8 @@ function applyMetaSettings(ms) {
     sync('tmodUpdateToggle', tmodUpdateCheck); syncMs('tmod_update', tmodUpdateCheck);
     sync('tmodIgnorePreviewToggle', tmodUpdateIgnorePreview); syncMs('tmod_update_ignore_preview', tmodUpdateIgnorePreview);
     sync('bgGlowToggle', bgGlow); syncMs('bg_glow', bgGlow);
+    sync('s_exitNotifyToggle', exitNotify); syncMs('exit_notify', exitNotify);
+    applyLaunchWindowMode();
     // 总开关同步子开关可用性（关闭总开关时置灰子开关）
     updateTooltipSubToggles();
     updateModlistSubToggles();
@@ -3101,6 +3114,25 @@ function bindThemeSwitch() {
         _sysLightMq.addEventListener('change', () => { if (themeMode === 'system') applyTheme(); });
 }
 
+/* ---- 启动行为：启动后窗口 / 退出通知 ---- */
+function applyLaunchWindowMode() {
+    const sw = document.getElementById('launchWindowSwitch');
+    if (sw) sw.querySelectorAll('[data-launch-window]').forEach(b =>
+        b.classList.toggle('active', b.dataset.launchWindow === launchWindowMode));
+}
+
+function setLaunchWindowMode(mode) {
+    launchWindowMode = mode === 'hide' ? 'hide' : 'keep';
+    applyLaunchWindowMode();
+    saveMetaSetting('launch_window', launchWindowMode);
+}
+
+function bindLaunchWindowSwitch() {
+    const sw = document.getElementById('launchWindowSwitch');
+    if (sw) sw.querySelectorAll('[data-launch-window]').forEach(b =>
+        b.addEventListener('click', () => setLaunchWindowMode(b.dataset.launchWindow || 'keep')));
+}
+
 /* ============================================================
    模块：崩溃日志查看器
    ============================================================ */
@@ -3253,6 +3285,40 @@ function switchSaveTab(tab) {
     renderSaves();
 }
 
+// 世界 / 人物的内部信息徽章（难度、大小、腐化猩红、困难模式、特殊种子、游玩时长…）
+function worldBadgesHtml(w) {
+    if (!w) return '';
+    const b = [];
+    if (w.size_name) b.push(`<span class="save-badge is-${escapeHtml(w.size_key || 'unknown')}">${escapeHtml(w.size_name)}</span>`);
+    if (w.game_mode_name) b.push(`<span class="save-badge is-${escapeHtml(w.game_mode_key || 'classic')}">${escapeHtml(w.game_mode_name)}</span>`);
+    b.push(w.is_crimson
+        ? '<span class="save-badge is-crimson"><i class="fas fa-droplet me-1"></i>猩红</span>'
+        : '<span class="save-badge is-corrupt"><i class="fas fa-skull me-1"></i>腐化</span>');
+    if (w.is_hard_mode) b.push('<span class="save-badge is-hardmode">困难模式</span>');
+    (w.special_seeds || []).forEach(s => b.push(`<span class="save-badge is-seed">${escapeHtml(s)}</span>`));
+    return `<div class="save-badges">${b.join('')}</div>`;
+}
+
+function playerBadgesHtml(p) {
+    if (!p) return '';
+    const b = [];
+    if (p.difficulty_name) b.push(`<span class="save-badge is-${escapeHtml(p.difficulty_key || 'softcore')}">${escapeHtml(p.difficulty_name)}</span>`);
+    if (p.play_seconds > 0) b.push(`<span class="save-badge is-time"><i class="fas fa-clock me-1"></i>${fmtDuration(p.play_seconds)}</span>`);
+    if (p.stat_life_max > 0) b.push(`<span class="save-badge is-life"><i class="fas fa-heart me-1"></i>${p.stat_life_max}</span>`);
+    if (p.stat_mana_max > 0) b.push(`<span class="save-badge is-mana"><i class="fas fa-star me-1"></i>${p.stat_mana_max}</span>`);
+    return `<div class="save-badges">${b.join('')}</div>`;
+}
+
+function saveDetailHtml(s) {
+    if (s.kind !== 'world' || !s.world) return '';
+    const w = s.world;
+    const bits = [];
+    if (w.seed) bits.push('种子 ' + escapeHtml(w.seed));
+    if (w.creation_time) bits.push('创建于 ' + fmtDateTime(w.creation_time));
+    if (w.size_x && w.size_y) bits.push(`${w.size_x}×${w.size_y}`);
+    return bits.length ? `<div class="save-detail">${bits.join(' · ')}</div>` : '';
+}
+
 function renderSaves() {
     const el = document.getElementById('savesList');
     const dirEl = document.getElementById('savesDirHint');
@@ -3287,6 +3353,8 @@ function renderSaves() {
             <div class="save-main">
                 <div class="save-name"><i class="fas ${s.kind === 'player' ? 'fa-user' : 'fa-globe'} me-2 text-info"></i>${escapeHtml(s.name)}</div>
                 <div class="save-meta">${escapeHtml(s.file_name)} · ${fmtSize(s.size)} · ${fmtDateTime(s.modified)}${s.backup_count ? ' · 已有 ' + s.backup_count + ' 份备份' : ''}</div>
+                ${saveDetailHtml(s)}
+                ${s.kind === 'player' ? playerBadgesHtml(s.player) : worldBadgesHtml(s.world)}
             </div>
             <div class="save-actions">
                 <button class="btn btn-sm btn-outline-info" data-save-action="backup" data-kind="${escapeHtml(s.kind)}" data-path="${escapeHtml(s.path)}" title="备份为 zip（存到程序目录 backups/saves）"><i class="fas fa-box-archive me-1"></i>备份</button>
@@ -3983,5 +4051,6 @@ initCapturesModal();
 initModVersionsModal();
 initCommandPalette();
 bindThemeSwitch();
+bindLaunchWindowSwitch();
 applyTheme();     // 先铺默认主题；metaSettings 回来后再覆盖
 loadStats();      // 版本卡片的「启动 N 次」徽章

@@ -60,11 +60,14 @@ public static class WebHostFactory
         builder.Services.AddSingleton<TmodUpdateService>();
         builder.Services.AddSingleton<SteamService>();
         builder.Services.AddSingleton<CrashLogService>();
+        builder.Services.AddSingleton<CrashAttributionService>();
         builder.Services.AddSingleton<SavesService>();
         builder.Services.AddSingleton<StatsService>();
         builder.Services.AddSingleton<SnapshotService>();
         builder.Services.AddSingleton<CapturesService>();
         builder.Services.AddSingleton<ModVersionService>();
+        builder.Services.AddSingleton<ExitReportService>();
+        builder.Services.AddSingleton<TModManager.App.Wpf.NotificationService>();
         builder.Services.AddHostedService<TmlMonitorService>();
         builder.Services.AddSingleton(windowControl ?? new WindowControlService());
 
