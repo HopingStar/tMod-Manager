@@ -130,7 +130,8 @@ textarea,
 
 /* 滚动条 */
 ::-webkit-scrollbar {
-    width: 8px;
+    width: 8px;                          /* 竖直滚动条粗细 */
+    height: 8px;                         /* 横向滚动条粗细 —— 不设会退回浏览器默认（十几像素，明显更粗） */
     background: transparent;
 }
 ::-webkit-scrollbar-thumb {
@@ -957,6 +958,51 @@ body[data-desktop="true"] #desktopShell {
 /* 模组详情弹窗浮在所有其它弹窗之上（如「当前 enabled.json」弹窗） */
 #modDetailModal { z-index: 2060; }
 
+/* 通用提示 / 确认 / 错误弹窗：必须浮在所有内容弹窗之上。
+   它们会在存档 / 日志 / 统计 / 模组详情等弹窗内部被触发，但 Bootstrap 默认
+   同为 1055，且它们在 DOM 中排在这些内容弹窗前面 ⇒ 会被后出现的弹窗整块压住。 */
+#appAlertModal, #appConfirmModal, #errorModal { z-index: 3100; }
+
+/* 确认框正文可能含换行（如「缺失模组」列表）：保留换行、折叠多余空白 */
+#appConfirmMsg { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* ---- 游戏截图 ---- */
+.capture-grid {
+    display: grid;                                   /* 每行数量随窗口宽度自适应 */
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    max-height: 60vh; overflow-y: auto; padding-right: 4px;
+}
+.capture-item {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 6px; border-radius: 10px; cursor: zoom-in;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.capture-item:hover { transform: translateY(-2px); border-color: rgba(13, 202, 240, 0.5); }
+.capture-item img {
+    width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
+    border-radius: 6px; background: rgba(0, 0, 0, 0.35); display: block;
+}
+.capture-name { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-meta { font-size: 0.68rem; color: #8a93a6; }
+html[data-theme="light"] .capture-item { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .capture-name { color: #26303f; }
+html[data-theme="light"] .capture-meta { color: #6b7688; }
+
+/* 灯箱：盖在内容弹窗之上（1055~2060），但仍在通用提示框（3100）之下 */
+#captureLightbox {
+    position: fixed; inset: 0; z-index: 2400;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex; align-items: center; justify-content: center;
+}
+.cap-lb-panel { max-width: 94vw; max-height: 94vh; display: flex; flex-direction: column; gap: 8px; }
+.cap-lb-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #e8eaf6; }
+.cap-lb-name { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap-lb-tools { display: flex; gap: 6px; flex-shrink: 0; }
+#capLbImg { max-width: 94vw; max-height: 84vh; object-fit: contain; border-radius: 8px; background: #000; display: block; }
+
 /* ========== 自定义右键菜单（替换 Chromium 默认菜单） ========== */
 #ctx-menu {
     position: fixed;
@@ -1417,3 +1463,326 @@ html.bg-glow-on::after {
 /* 列表内嵌的空状态：更紧凑 */
 .mods-list .empty-state { padding: 20px 12px; }
 .mods-list .empty-state > i { font-size: 26px; }
+
+/* ============================================================
+   新功能：崩溃日志 / 存档管理 / 游玩统计 / 命令面板 / 主题
+   ============================================================ */
+
+/* ---- 版本卡片「启动 N 次」徽章 ---- */
+.play-count-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #9fe6b8;
+    background: rgba(25, 135, 84, 0.18);
+    border: 1px solid rgba(25, 135, 84, 0.35);
+    border-radius: 10px;
+    vertical-align: 1px;
+    white-space: nowrap;
+}
+.play-count-badge .fa-play { font-size: 0.62rem; }
+
+/* 命令面板按钮里的快捷键小标 */
+.palette-kbd {
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: 0.68rem;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: inherit;
+}
+
+/* 设置里的次级小标题 */
+.settings-sub-title {
+    margin: 16px 0 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #9db0c8;
+}
+
+/* 命令面板跳转后目标卡片闪一下 */
+@keyframes paletteFlash {
+    0%   { box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.85); }
+    100% { box-shadow: 0 0 0 14px rgba(13, 202, 240, 0); }
+}
+.palette-flash { animation: paletteFlash 0.9s ease-out 2; }
+
+/* ---- 崩溃日志查看器 ---- */
+.log-layout { display: flex; gap: 14px; height: 62vh; min-height: 320px; }
+.log-sidebar { width: 232px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
+.log-file-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
+.log-file-item {
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    padding: 7px 9px;
+    color: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.log-file-item:hover { background: rgba(13, 202, 240, 0.12); }
+.log-file-item.active { background: rgba(13, 202, 240, 0.2); border-color: rgba(13, 202, 240, 0.5); }
+.log-file-name { font-size: 0.85rem; font-weight: 600; word-break: break-all; }
+.log-file-meta { font-size: 0.72rem; color: #9db0c8; }
+.log-viewer-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.log-viewer-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.log-viewer {
+    flex: 1; min-height: 0; margin: 0;
+    overflow: auto;                    /* 不换行：超长行用横向滚动查看 */
+    background: #0e1426;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 8px 0;
+    font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: #cfd8e3;
+    user-select: text;                 /* 日志正文可选中（body 默认禁选） */
+    -webkit-user-select: text;
+}
+.log-row { display: flex; width: max-content; min-width: 100%; }
+.log-gutter {
+    position: sticky; left: 0; flex: 0 0 auto;   /* 横向滚动时行号列固定不动 */
+    min-width: 3.4em; padding: 0 12px;
+    text-align: right; color: #6b7688;
+    background: #0e1426;                         /* 盖住滚到下方的日志正文 */
+    user-select: none; -webkit-user-select: none;
+}
+.log-text { white-space: pre; padding-right: 14px; }
+.log-empty { padding: 0 12px; }
+.log-row-error .log-text { color: #ff8a8a; background: rgba(220, 53, 69, 0.16); }
+.log-row-error .log-gutter { color: #ff8a8a; }
+
+/* ---- 存档管理 ---- */
+.saves-list { max-height: 58vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.save-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 12px; border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.save-item:hover { background: rgba(255, 255, 255, 0.06); }
+.save-main { min-width: 0; }
+.save-name { font-weight: 600; font-size: 0.92rem; }
+.save-meta { font-size: 0.75rem; color: #9db0c8; word-break: break-all; }
+.save-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ---- 游玩统计 ---- */
+.stats-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat-card {
+    padding: 12px 14px; border-radius: 12px; text-align: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stat-card.stat-live { border-color: rgba(40, 167, 69, 0.6); background: rgba(40, 167, 69, 0.12); }
+.stat-value { font-size: 1.15rem; font-weight: 700; color: #c3b5ff; }
+.stat-card.stat-live .stat-value { color: #6ee49a; font-size: 0.95rem; }
+.stat-label { font-size: 0.75rem; color: #9db0c8; }
+.stats-table, .stats-recent { display: flex; flex-direction: column; gap: 3px; }
+.stats-row, .stats-recent-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 6px 10px; border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.stats-row .stats-name, .stats-recent-row .stats-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stats-cell { color: #0dcaf0; font-variant-numeric: tabular-nums; font-size: 0.85rem; flex-shrink: 0; }
+
+/* ---- 命令面板（Ctrl+K）---- */
+#commandPalette { position: fixed; inset: 0; z-index: 3000; }
+.palette-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.palette-panel {
+    position: relative;
+    max-width: 620px;
+    margin: 12vh auto 0;
+    background: rgba(24, 35, 66, 0.985);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.62);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: paletteIn 0.14s ease-out;
+}
+@keyframes paletteIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.99); }
+    to   { opacity: 1; transform: none; }
+}
+.palette-input-wrap {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: #9db0c8;
+}
+.palette-input-wrap input {
+    flex: 1; min-width: 0; background: transparent; border: 0; outline: 0;
+    color: #e8eaf6; font-size: 0.98rem;
+}
+.palette-input-wrap kbd, .palette-footer kbd {
+    padding: 1px 5px; font-size: 0.68rem;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px; color: #c3b5ff;
+}
+.palette-results { max-height: 46vh; overflow-y: auto; padding: 6px; }
+.palette-group {
+    padding: 8px 10px 4px; font-size: 0.72rem; font-weight: 700;
+    color: #8a93a6; letter-spacing: 0.4px;
+}
+.palette-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.palette-row .palette-icon { width: 16px; text-align: center; color: #7f8ba3; }
+.palette-row .palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-row .palette-hint { font-size: 0.75rem; color: #8a93a6; flex-shrink: 0; }
+.palette-row.sel { background: linear-gradient(135deg, rgba(99, 102, 241, 0.45), rgba(138, 93, 255, 0.35)); }
+.palette-row.sel .palette-icon { color: #fff; }
+.palette-footer {
+    display: flex; gap: 16px;
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem; color: #8a93a6;
+}
+
+/* ============================================================
+   浅色主题（覆盖层，追加在最后）
+   与 Bootstrap 的 data-bs-theme="light" 配合：组件交给它，自绘部分在这里覆盖
+   ============================================================ */
+html[data-theme="light"] { background: #eef1f7; }
+html[data-theme="light"]::before { background: radial-gradient(circle at 10% 20%, #f9fbff, #e3e9f4); }
+html[data-theme="light"] body { color: #26303f; }
+html[data-theme="light"] body[data-desktop="true"] { background: #eef1f7 !important; }
+html[data-theme="light"] #winTitlebar { background: rgba(255, 255, 255, 0.92); border-bottom-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .win-title { color: #4b3fa8; }
+
+html[data-theme="light"] .glass-card {
+    background: rgba(255, 255, 255, 0.94) !important;
+    border-color: rgba(15, 23, 42, 0.1) !important;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .glass-card:hover { box-shadow: 0 12px 40px rgba(15, 23, 42, 0.16); }
+html[data-theme="light"] #statusBar { background: rgba(255, 255, 255, 0.75) !important; }
+
+html[data-theme="light"] .form-control,
+html[data-theme="light"] .form-select {
+    background: #ffffff !important;
+    border: 1px solid rgba(15, 23, 42, 0.14) !important;
+    color: #26303f !important;
+}
+html[data-theme="light"] .form-control::placeholder { color: #8a93a6; }
+html[data-theme="light"] .bg-dark { background-color: #f2f5fa !important; color: #26303f !important; }
+html[data-theme="light"] .modal-header .btn-close { filter: none; }
+
+html[data-theme="light"] .settings-nav { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .settings-nav-item { color: #4a5568; }
+html[data-theme="light"] .settings-nav-item:hover { background: rgba(99, 102, 241, 0.12); color: #312e81; }
+html[data-theme="light"] .settings-pane-title { color: #1f2937; }
+html[data-theme="light"] .settings-sub-title { color: #6b7688; }
+html[data-theme="light"] .about-card { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .about-label { color: #4a5568; }
+
+html[data-theme="light"] .log-viewer { background: #f7f9fc; border-color: rgba(15, 23, 42, 0.12); color: #2b3543; }
+html[data-theme="light"] .log-gutter { background: #f7f9fc; color: #8a93a6; }
+html[data-theme="light"] .log-row-error .log-text { color: #b02a37; background: rgba(220, 53, 69, 0.12); }
+html[data-theme="light"] .log-row-error .log-gutter { color: #b02a37; }
+html[data-theme="light"] .log-file-item { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .log-file-meta { color: #6b7688; }
+html[data-theme="light"] .save-item,
+html[data-theme="light"] .stats-row,
+html[data-theme="light"] .stats-recent-row,
+html[data-theme="light"] .stat-card { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .save-meta,
+html[data-theme="light"] .stat-label { color: #6b7688; }
+html[data-theme="light"] .stat-value { color: #5b46c8; }
+html[data-theme="light"] .stats-cell { color: #0a7ea4; }
+
+html[data-theme="light"] .palette-panel { background: #ffffff; border-color: rgba(15, 23, 42, 0.12); }
+html[data-theme="light"] .palette-input-wrap { color: #6b7688; }
+html[data-theme="light"] .palette-input-wrap input { color: #1f2937; }
+html[data-theme="light"] .palette-input-wrap kbd,
+html[data-theme="light"] .palette-footer kbd { background: rgba(15, 23, 42, 0.08); color: #4b3fa8; }
+html[data-theme="light"] .palette-footer { border-top-color: rgba(15, 23, 42, 0.1); color: #6b7688; }
+html[data-theme="light"] .palette-row .palette-icon { color: #7f8ba3; }
+html[data-theme="light"] .palette-row .palette-hint { color: #6b7688; }
+html[data-theme="light"] .palette-kbd { background: rgba(15, 23, 42, 0.08); }
+
+html[data-theme="light"] .mod-item.disabled:hover { background: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] .mod-tooltip { background: rgba(255, 255, 255, 0.98); border-color: rgba(15, 23, 42, 0.14); }
+html[data-theme="light"] .play-count-badge { color: #16794a; background: rgba(25, 135, 84, 0.12); }
+html[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.45); }
+
+/* 状态栏底色：原来写在 index.html 的行内样式里，行内 !important 会盖过一切；
+   搬到样式表后浅色主题才能覆盖（#statusBar 的 id 优先级高于 .glass-card）。 */
+#statusBar { background: rgba(0, 0, 0, 0.3) !important; }
+html[data-theme="light"] #statusBar { background: rgba(255, 255, 255, 0.8) !important; }
+html[data-theme="light"] .border-top { border-top-color: rgba(15, 23, 42, 0.12) !important; }
+
+/* 浅色：这些规则用了硬编码的浅色文字，需要单独翻转 */
+html[data-theme="light"] .list-group-item { color: #26303f; border-bottom-color: rgba(15, 23, 42, 0.08); }
+html[data-theme="light"] .list-group-item:hover { background: rgba(15, 23, 42, 0.04) !important; }
+html[data-theme="light"] .mod-tooltip { background: rgba(255, 255, 255, 0.98); color: #26303f; }
+/* btn-outline-light 是「给深色背景用的浅色按钮」，浅色主题下必须翻转，否则看不见 */
+html[data-theme="light"] .btn-outline-light { color: #3b4757; border-color: rgba(15, 23, 42, 0.35); }
+html[data-theme="light"] .btn-outline-light:hover { background: rgba(15, 23, 42, 0.08); color: #1f2937; border-color: rgba(15, 23, 42, 0.5); }
+html[data-theme="light"] .win-btn { color: #4a5568; }
+html[data-theme="light"] .win-btn:hover { background: rgba(15, 23, 42, 0.08); color: #1f2937; }
+
+/* ========== 本地模组版本回滚 ========== */
+#modVersionsModal .modal-body { position: relative; }
+.mv-layout { display: flex; gap: 12px; }
+.mv-left { width: 290px; flex-shrink: 0; display: flex; flex-direction: column; }
+.mv-list { flex: 1; overflow-y: auto; max-height: 56vh; padding-right: 4px; }
+.mv-right { flex: 1; min-width: 0; overflow-y: auto; max-height: 56vh; padding-right: 4px; }
+.mv-row { padding: 7px 9px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; margin-bottom: 4px; }
+.mv-row:hover { background: rgba(255, 255, 255, 0.05); }
+.mv-row.sel { background: rgba(13, 202, 240, 0.12); border-color: rgba(13, 202, 240, 0.45); }
+.mv-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mv-name { font-size: 0.84rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-ver { font-size: 0.72rem; color: #8a93a6; flex-shrink: 0; }
+.mv-row-sub { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: #8a93a6; margin-top: 2px; }
+.mv-badge { font-size: 0.66rem; padding: 1px 6px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+.mv-badge.warn { color: #ffd479; background: rgba(255, 193, 7, 0.14); border-color: rgba(255, 193, 7, 0.45); }
+.mv-badge.muted { color: #8a93a6; background: rgba(255, 255, 255, 0.06); }
+.mv-badge.pool { color: #7fd8ff; background: rgba(13, 202, 240, 0.12); }
+.mv-dim { color: #8a93a6; }
+.mv-ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-detail-head { margin-bottom: 10px; }
+.mv-detail-name { font-size: 1rem; font-weight: 700; }
+.mv-detail-sub { font-size: 0.76rem; }
+.mv-warnbox { border: 1px solid rgba(255, 193, 7, 0.45); background: rgba(255, 193, 7, 0.08); border-radius: 10px; padding: 9px 11px; margin-bottom: 10px; font-size: 0.78rem; }
+.mv-warn-title { font-weight: 600; color: #ffd479; margin-bottom: 2px; }
+.mv-dup-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid rgba(255, 193, 7, 0.2); }
+.mv-dup-main { min-width: 0; font-size: 0.78rem; }
+.mv-sec-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82rem; font-weight: 600; margin: 6px 0 8px; padding-bottom: 5px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.mv-ver-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); }
+.mv-ver-row.cur { border-color: rgba(25, 135, 84, 0.45); background: rgba(25, 135, 84, 0.08); }
+.mv-ver-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; min-width: 0; }
+.mv-ver-no { font-weight: 600; }
+.mv-ver-sub { font-size: 0.7rem; min-width: 0; }
+.mv-ver-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 6px; }
+.mv-curtag { font-size: 0.72rem; color: #6ee7a8; }
+.mv-empty { font-size: 0.76rem; color: #8a93a6; padding: 6px 0; }
+.mv-foot-tip { font-size: 0.72rem; margin-right: auto; text-align: left; }
+.mv-dropmask { position: absolute; inset: 0; z-index: 5; display: none; align-items: center; justify-content: center; background: rgba(13, 202, 240, 0.13); border: 2px dashed rgba(13, 202, 240, 0.7); border-radius: 12px; pointer-events: none; }
+.mv-dropmask.on { display: flex; }
+.mv-droptext { font-weight: 600; color: #9fe8ff; }
+
+html[data-theme="light"] .mv-row:hover { background: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] .mv-ver-row { background: rgba(15, 23, 42, 0.03); border-color: rgba(15, 23, 42, 0.1); }
+html[data-theme="light"] .mv-ver-row.cur { border-color: rgba(25, 135, 84, 0.5); background: rgba(25, 135, 84, 0.08); }
+html[data-theme="light"] .mv-sec-title { border-bottom-color: rgba(15, 23, 42, 0.12); }
+html[data-theme="light"] .mv-name,
+html[data-theme="light"] .mv-detail-name { color: #26303f; }
+html[data-theme="light"] .mv-ver,
+html[data-theme="light"] .mv-row-sub,
+html[data-theme="light"] .mv-dim { color: #6b7688; }
+html[data-theme="light"] .mv-badge.muted { background: rgba(15, 23, 42, 0.08); color: #6b7688; }
+html[data-theme="light"] .mv-warnbox { background: rgba(255, 193, 7, 0.16); }
+html[data-theme="light"] .mv-warn-title { color: #7a5c00; }
+html[data-theme="light"] .mv-dup-row { border-top-color: rgba(180, 140, 0, 0.3); }
+html[data-theme="light"] .mv-curtag { color: #16794a; }
+html[data-theme="light"] .mv-droptext { color: #0a7ea4; }

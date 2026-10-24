@@ -118,6 +118,32 @@ public static class TmodParser
         }
     }
 
+    /// <summary>
+    /// 只读 .tmod 文件头的三个字段：**tML 构建版本 / 内部 ID / 模组版本**。
+    /// 读到 version 就返回，**不解压任何条目**（对比 <see cref="Parse"/> 还要解压 icon.png）——
+    /// 批量扫描整个 Mods 目录时用这个。
+    /// </summary>
+    public static (string Build, string Name, string Version)? ParseHeader(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            using var br = new BinaryReader(fs);
+            if (br.ReadUInt32() != TmodMagic) return null;
+            var build = Read7Str(br);    // tML 版本
+            br.ReadBytes(20);            // SHA1
+            br.ReadBytes(256);           // 签名
+            br.ReadUInt32();             // 数据长度
+            var name = Read7Str(br);     // 内部 ID
+            var version = Read7Str(br);  // 模组版本
+            return string.IsNullOrEmpty(name) ? null : (build, name, version);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string Read7Str(BinaryReader br)
     {
         var n = br.Read7BitEncodedInt();

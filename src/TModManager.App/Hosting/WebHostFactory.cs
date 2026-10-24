@@ -5,11 +5,17 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TModManager.Core.Captures;
 using TModManager.Core.Configuration;
 using TModManager.Core.Logging;
+using TModManager.Core.Logs;
 using TModManager.Core.Mods;
+using TModManager.Core.ModVersions;
 using TModManager.Core.Network;
 using TModManager.Core.Processes;
+using TModManager.Core.Saves;
+using TModManager.Core.Snapshots;
+using TModManager.Core.Stats;
 using TModManager.Core.Storage;
 
 namespace TModManager.App.Hosting;
@@ -28,7 +34,15 @@ public static class WebHostFactory
         });
 
         // 127.0.0.1 随机空闲端口（ListenLocalhost(0) 不支持动态端口，改用显式 Loopback）
-        builder.WebHost.ConfigureKestrel(k => k.Listen(System.Net.IPAddress.Loopback, 0));
+        builder.WebHost.ConfigureKestrel(k =>
+        {
+            k.Listen(System.Net.IPAddress.Loopback, 0);
+            // 模组版本归档走「把拖进来的 .tmod 原样 POST 上来」这条路 —— WebView2 拿不到文件真实路径
+            // （Chromium 没有 Electron 那个 File.path），只能走 HTTP 上传。
+            // Kestrel 默认只收 30 MB，而单个 .tmod 轻松上百 MB（本机实测 CalamityMod 114 MB）。
+            // 只监听回环、且本服务只被自家页面访问，放宽到 4 GB 是安全的。
+            k.Limits.MaxRequestBodySize = 4L * 1024 * 1024 * 1024;
+        });
 
         AppLog.Init(paths);
 
@@ -42,6 +56,12 @@ public static class WebHostFactory
         builder.Services.AddSingleton<GitHubService>();
         builder.Services.AddSingleton<TmodUpdateService>();
         builder.Services.AddSingleton<SteamService>();
+        builder.Services.AddSingleton<CrashLogService>();
+        builder.Services.AddSingleton<SavesService>();
+        builder.Services.AddSingleton<StatsService>();
+        builder.Services.AddSingleton<SnapshotService>();
+        builder.Services.AddSingleton<CapturesService>();
+        builder.Services.AddSingleton<ModVersionService>();
         builder.Services.AddHostedService<TmlMonitorService>();
         builder.Services.AddSingleton(windowControl ?? new WindowControlService());
 

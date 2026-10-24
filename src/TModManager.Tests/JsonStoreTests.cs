@@ -67,6 +67,55 @@ public class JsonStoreTests
     }
 
     [Fact]
+    public async Task Write_IsAtomic_LeavesNoTempFile_AndKeepsPreviousAsBak()
+    {
+        using var tmp = new TestPaths();
+        var store = new JsonStore(tmp.AppPaths);
+
+        await store.UpdateAsync(d => { d.Versions.Add(new VersionEntry { Name = "第一版" }); return true; });
+        await store.UpdateAsync(d => { d.Versions.Add(new VersionEntry { Name = "第二版" }); return true; });
+
+        // 主文件是最后一次的内容；上一份被留成 .bak；临时文件不残留
+        Assert.False(File.Exists(tmp.AppPaths.DataFile + ".tmp"));
+        var bak = tmp.AppPaths.DataFile + ".bak";
+        Assert.True(File.Exists(bak));
+        Assert.Contains("第一版", await File.ReadAllTextAsync(bak));
+        Assert.Contains("第二版", await File.ReadAllTextAsync(tmp.AppPaths.DataFile));
+    }
+
+    [Fact]
+    public async Task CorruptedFile_IsPreserved_AndRecoveredFromBackup()
+    {
+        using var tmp = new TestPaths();
+        var store = new JsonStore(tmp.AppPaths);
+        await store.UpdateAsync(d => { d.Versions.Add(new VersionEntry { Name = "好数据" }); return true; });
+        await store.UpdateAsync(d => { d.Versions.Add(new VersionEntry { Name = "新数据" }); return true; });
+
+        await File.WriteAllTextAsync(tmp.AppPaths.DataFile, "{ 半截文件");   // 模拟写到一半被杀
+
+        var reader = new JsonStore(tmp.AppPaths);                            // 模拟下次启动
+        var recovered = await reader.ReadAsync();
+
+        Assert.Equal("好数据", Assert.Single(recovered.Versions).Name);      // 从 .bak 恢复
+        Assert.NotNull(reader.LastLoadWarning);
+        Assert.Contains(Directory.GetFiles(tmp.AppPaths.BaseDir, "data.json.corrupt-*"), _ => true);  // 坏文件留证
+    }
+
+    [Fact]
+    public async Task CorruptedFile_WithoutBackup_WarnsInsteadOfSilentlyResetting()
+    {
+        using var tmp = new TestPaths();
+        await File.WriteAllTextAsync(tmp.AppPaths.DataFile, "not json at all");
+
+        var store = new JsonStore(tmp.AppPaths);
+        var data = await store.ReadAsync();
+
+        Assert.Empty(data.Versions);
+        Assert.NotNull(store.LastLoadWarning);                                // 关键：不再静默
+        Assert.NotEmpty(Directory.GetFiles(tmp.AppPaths.BaseDir, "data.json.corrupt-*"));
+    }
+
+    [Fact]
     public async Task Write_SnakeCaseAndEscaping_MatchPythonStyle()
     {
         using var tmp = new TestPaths();

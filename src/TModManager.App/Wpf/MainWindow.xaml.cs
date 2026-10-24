@@ -180,6 +180,16 @@ public partial class MainWindow : Window
         var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
         await webView.EnsureCoreWebView2Async(env);
         webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        // 禁用界面缩放：Chromium 默认 Ctrl+滚轮 / Ctrl+加减小键盘 / Ctrl+0 都会缩放整个页面，
+        // 会把固定像素布局与各弹窗的定位一起放大，且刷新后仍保留（缩放级别被记住）。
+        // 触屏 / 触控板双指捏合缩放同理，一并关掉。
+        webView.CoreWebView2.Settings.IsZoomControlEnabled = false;
+        webView.CoreWebView2.Settings.IsPinchZoomEnabled = false;
+        // 缩放级别会被 WebView2 按「源」记在用户数据目录里 —— 关掉控件还不够，
+        // 得把级别复位，否则之前被放大过的用户重启后仍是放大状态。
+        // 复位要在每次文档加载完之后再做一次：per-origin 的缩放是随文档加载才生效的。
+        webView.ZoomFactor = 1.0;
+        webView.CoreWebView2.NavigationCompleted += (_, _) => webView.ZoomFactor = 1.0;
         // 禁用 Chromium 默认右键菜单（复制/打印/另存为…），右键菜单由前端自定义实现
         webView.CoreWebView2.ContextMenuRequested += (_, e) => e.Handled = true;
         webView.CoreWebView2.AddHostObjectToScript("pywebviewHost", _bridge);

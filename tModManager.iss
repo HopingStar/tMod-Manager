@@ -3,7 +3,7 @@
 ; 源文件：散装发布产物（publish/ 全部内容）
 
 #define MyAppName "tModManager"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.2.0"
 #define MyAppExeName "tModManager.exe"
 #define MyAppIcon "src\TModManager.App\app.ico"
 #define MyPublishDir "src\TModManager.App\bin\Release\net8.0-windows\win-x64\publish"

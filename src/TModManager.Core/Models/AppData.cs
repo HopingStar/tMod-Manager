@@ -14,6 +14,9 @@ public sealed class AppData
     public Dictionary<string, JsonElement> MetaSettings { get; set; } = new();
     public Favorites Favorites { get; set; } = new();
 
+    /// <summary>游玩统计（按版本 / 整合包累计启动次数与游玩时长）。</summary>
+    public PlayStats Stats { get; set; } = new();
+
     /// <summary>窗口缩放尺寸持久化（DIP 整数宽高）；null = 从未保存，用默认尺寸。</summary>
     public WindowSizeInfo? WindowSize { get; set; }
 }
@@ -45,6 +48,9 @@ public sealed class LastLaunch
 
     /// <summary>最近一次启动实际生效的禁用集合；null 表示旧数据（无此字段）→ launch_current 回退按配置计算。</summary>
     public List<string>? Disabled { get; set; }
+
+    /// <summary>本次启动前保存的 enabled.json 快照 id（可据此回退）；null 表示没存成。</summary>
+    public string? SnapshotId { get; set; }
 }
 
 public sealed class GlobalSpecial

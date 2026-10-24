@@ -60,7 +60,7 @@
     <div id="appFrame">
     <!-- 自绘窗口标题栏（仅 pywebview 独立窗口显示；浏览器模式隐藏） -->
     <div id="winTitlebar" style="display:none;">
-        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModManager <span class="text-info small" id="appVersion" title="构建版本">v2.1.0</span></span>
+        <span class="win-title"><i class="fas fa-rocket text-primary me-1"></i>tModManager <span class="text-info small" id="appVersion" title="构建版本">v2.2.0</span></span>
         <div class="win-controls">
             <button class="win-btn" id="winMinBtn" title="最小化"><i class="fas fa-minus"></i></button>
             <button class="win-btn" id="winMaxBtn" title="全屏 / 还原"><i class="fas fa-expand"></i></button>
@@ -78,7 +78,7 @@
         </div>
 
         <!-- 状态栏 -->
-        <div id="statusBar" class="glass-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between border-0" style="background: rgba(0,0,0,0.3) !important; border-radius: 15px;">
+        <div id="statusBar" class="glass-card p-3 mb-4 d-flex flex-wrap align-items-center justify-content-between border-0" style="background: rgba(0,0,0,0.3); border-radius: 15px;">
             <div class="d-flex align-items-center gap-4">
                 <!-- tModLoader 状态 -->
                 <div class="d-flex align-items-center gap-2">
@@ -117,6 +117,17 @@
                 <button class="btn btn-sm btn-outline-info neon-btn" onclick="openCurrentEnabled()">
                     <i class="fas fa-th-list me-1"></i>当前 enabled.json
                 </button>
+                <button class="btn btn-sm btn-outline-light neon-btn" onclick="openCommandPalette()" title="全局搜索 / 命令面板（Ctrl+K）">
+                    <i class="fas fa-magnifying-glass me-1"></i>搜索<kbd class="palette-kbd">Ctrl K</kbd>
+                </button>
+                <div class="btn-group" role="group" aria-label="工具">
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openLogsModal()" title="崩溃日志查看器"><i class="fas fa-file-lines"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openSavesModal()" title="存档管理（世界 / 人物）"><i class="fas fa-box-archive"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openStatsModal()" title="游玩统计"><i class="fas fa-chart-line"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openSnapshotsModal()" title="enabled.json 快照（每次以整合包启动前自动保存，可回退）"><i class="fas fa-clock-rotate-left"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openCapturesModal()" title="游戏截图"><i class="fas fa-images"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary neon-btn" onclick="openModVersionsModal()" title="本地模组版本回滚（把 .tmod 拖进弹窗即可添加为版本）"><i class="fas fa-code-branch"></i></button>
+                </div>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <button class="btn btn-sm btn-primary neon-btn" onclick="openAddVersionModal()" title="添加一个新的 tModLoader 版本">
@@ -141,7 +152,7 @@
     </div>
 
     <!-- 添加版本模态框 -->
-    <div class="modal fade" id="addVersionModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="addVersionModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -174,7 +185,7 @@
     </div>
 
     <!-- 添加整合包模态框 -->
-    <div class="modal fade" id="addPackModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="addPackModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -195,7 +206,7 @@
     </div>
 
     <!-- 编辑版本模态框 -->
-    <div class="modal fade" id="versionEditModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="versionEditModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -228,7 +239,7 @@
     </div>
 
     <!-- 整合包描述模态框（预览 + 编辑双模式） -->
-    <div class="modal fade" id="packDescModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="packDescModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -263,7 +274,7 @@
     </div>
 
     <!-- 整合包模组列表模态框 -->
-    <div class="modal fade" id="packModsModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="packModsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -319,7 +330,7 @@
     <div id="modTooltip" class="mod-tooltip" style="display:none;"></div>
 
     <!-- 模组详情模态框（点击模组查看：订阅数 / 描述） -->
-    <div class="modal fade" id="modDetailModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="modDetailModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -337,7 +348,7 @@
     </div>
 
     <!-- 启动当前配置模态框（选版本直接启动） -->
-    <div class="modal fade" id="launchCurrentModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="launchCurrentModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -353,7 +364,7 @@
     </div>
 
     <!-- 当前 enabled.json 模组列表模态框 -->
-    <div class="modal fade" id="currentEnabledModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="currentEnabledModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered modal-lg" style="max-width:900px;">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -369,7 +380,7 @@
     </div>
 
     <!-- 特殊加载项模态框 -->
-    <div class="modal fade" id="specialModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="specialModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -395,7 +406,7 @@
                     <div id="specialModsList" class="special-mods-list"></div>
                     <div id="specialEmpty" class="empty-inline mt-2" style="display:none;"><i class="fas fa-inbox"></i><span>Mods 目录未检测到 .tmod 文件</span></div>
                     <!-- 模组元数据设置（仅全局设置模式显示） -->
-                    <div id="metaSettingsWrap" class="mt-3 pt-3 border-top" style="display:none; border-color:rgba(255,255,255,0.08) !important;">
+                    <div id="metaSettingsWrap" class="mt-3 pt-3 border-top" style="display:none; border-color:rgba(255,255,255,0.08);">
                         <h6 class="fw-bold"><i class="fas fa-cloud-download-alt me-1"></i>tModLoader 更新检测</h6>
                         <div class="text-secondary small mb-2">从 GitHub Releases 检测 tModLoader 是否有新版本（需联网，失败时自动隐藏）</div>
                         <div class="form-check form-switch mb-2">
@@ -406,7 +417,7 @@
                             <input class="form-check-input" type="checkbox" role="switch" id="tmodIgnorePreviewToggle">
                             <label class="form-check-label fw-bold" for="tmodIgnorePreviewToggle">忽略 Preview 版（仅提示稳定版更新）</label>
                         </div>
-                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08);">
                         <h6 class="fw-bold"><i class="fas fa-info-circle me-1"></i>模组元数据（本名 / 图标）</h6>
                         <div class="text-secondary small mb-2">自动从 Steam 创意工坊获取模组本名与图标，结果缓存在本地。查不到 workshop ID 的模组只显示文件名。</div>
                         <div class="form-check form-switch mb-2">
@@ -443,7 +454,7 @@
                         </div>
                         </div>
                         <!-- Tooltip 信息设置 -->
-                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                        <div class="border-top pt-3 mt-3" style="border-color:rgba(255,255,255,0.08);">
                             <h6 class="fw-bold"><i class="fas fa-comment-dots me-1"></i>Tooltip 信息设置</h6>
                             <div class="text-secondary small mb-2">控制悬浮模组时浮动框里显示的信息。</div>
                             <div class="form-check form-switch mb-2">
@@ -482,7 +493,7 @@
     </div>
 
     <!-- 全局设置弹窗（分板块：左侧垂直导航切换；特殊加载弹窗保持原样不动） -->
-    <div class="modal fade" id="settingsModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="settingsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -526,7 +537,7 @@
                                         <label class="form-check-label fw-bold" for="s_showStatsToggle">在列表中显示统计数据</label>
                                     </div>
                                 </div>
-                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08);">
                                 <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" role="switch" id="s_showTagsToggle" data-mskey="show_tags">
                                     <label class="form-check-label fw-bold" for="s_showTagsToggle">显示模组标签</label>
@@ -567,7 +578,7 @@
                                         <label class="form-check-label fw-bold" for="s_showTooltipToggle">启用 Tooltip 悬浮提示</label>
                                     </div>
                                 </div>
-                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08) !important;">
+                                <div class="border-top pt-3" style="border-color:rgba(255,255,255,0.08);">
                                 <div class="form-check form-switch mb-2">
                                     <input class="form-check-input" type="checkbox" role="switch" id="s_showTooltipVersionToggle" data-mskey="show_tooltip_version">
                                     <label class="form-check-label fw-bold" for="s_showTooltipVersionToggle">显示版本号</label>
@@ -618,6 +629,13 @@
                                     <input class="form-check-input" type="checkbox" role="switch" id="s_bgGlowToggle" data-mskey="bg_glow">
                                     <label class="form-check-label fw-bold" for="s_bgGlowToggle">背景光晕缓慢漂移</label>
                                 </div>
+                                <div class="settings-sub-title">主题</div>
+                                <div class="btn-group w-100 mb-2" role="group" id="themeSwitch">
+                                    <button type="button" class="btn btn-outline-info neon-btn" data-theme-opt="dark"><i class="fas fa-moon me-1"></i>深色</button>
+                                    <button type="button" class="btn btn-outline-info neon-btn" data-theme-opt="light"><i class="fas fa-sun me-1"></i>浅色</button>
+                                    <button type="button" class="btn btn-outline-info neon-btn" data-theme-opt="system"><i class="fas fa-desktop me-1"></i>跟随系统</button>
+                                </div>
+                                <div class="text-secondary small">浅色主题仍在打磨中，个别配色可能不够理想。</div>
                             </div>
                             <!-- 板块：关于 -->
                             <div class="settings-pane" id="sp-about" style="display:none;">
@@ -637,7 +655,7 @@
                                         <span class="about-value"><a href="javascript:void(0)" onclick="openAboutGithub()" title="打开 GitHub 仓库">https://github.com/HopingStar/tMod-Manager</a></span>
                                     </div>
                                 </div>
-                                <div class="text-secondary small mt-3"><i class="fas fa-copyright me-1"></i>2026 HopingStar · MIT License</div>
+                                <div class="text-secondary small mt-3"><i class="fas fa-copyright me-1"></i>2026 HopingStar · GPL-3.0 License</div>
                             </div>
                         </div>
                     </div>
@@ -651,7 +669,7 @@
     </div>
 
     <!-- 通用提示模态框（替代 alert） -->
-    <div class="modal fade" id="appAlertModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="appAlertModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -669,7 +687,7 @@
     </div>
 
     <!-- 通用确认模态框（替代 confirm） -->
-    <div class="modal fade" id="appConfirmModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="appConfirmModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -688,7 +706,7 @@
     </div>
 
     <!-- 错误模态框 -->
-    <div class="modal fade" id="errorModal" tabindex="-1" data-bs-theme="dark">
+    <div class="modal fade" id="errorModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content glass-card border-0">
                 <div class="modal-header border-0">
@@ -707,6 +725,206 @@
 
     <!-- 顶部下拉 Toast 通知容器（启动成功 / 设置已应用等） -->
     <div id="toastContainer" aria-live="polite"></div>
+
+    <!-- 崩溃日志查看器 -->
+    <div class="modal fade" id="logsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-file-lines me-2 text-info"></i>崩溃日志查看器</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="logsEmptyHint" class="empty-inline" style="display:none;"><i class="fas fa-circle-info"></i><span>未找到日志目录。请先启动一次 tModLoader，或确认版本启动脚本所在目录下存在 tModLoader-Logs。</span></div>
+                    <div class="log-layout" id="logLayout" style="display:none;">
+                        <div class="log-sidebar">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="fw-bold small">日志文件</span>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="refreshLogs()" title="重新扫描"><i class="fas fa-rotate"></i></button>
+                            </div>
+                            <div id="logFileList" class="log-file-list"></div>
+                        </div>
+                        <div class="log-viewer-wrap">
+                            <div class="log-viewer-toolbar">
+                                <label class="form-check form-switch mb-0 me-2">
+                                    <input class="form-check-input" type="checkbox" id="logOnlyErrors">
+                                    <span class="form-check-label small">只看错误行</span>
+                                </label>
+                                <span id="logErrorCount" class="text-danger small me-auto"></span>
+                                <button class="btn btn-sm btn-outline-info" onclick="scrollLogToEnd()" title="跳到末尾"><i class="fas fa-arrow-down"></i></button>
+                                <button class="btn btn-sm btn-outline-info" onclick="copyLogText()" title="复制全文"><i class="fas fa-copy"></i></button>
+                                <button class="btn btn-sm btn-outline-warning" onclick="openLogFolder()" title="打开日志所在文件夹"><i class="fas fa-folder-open"></i></button>
+                            </div>
+                            <div id="logViewer" class="log-viewer"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 存档管理 -->
+    <div class="modal fade" id="savesModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-box-archive me-2 text-warning"></i>存档管理 <span class="text-secondary small ms-2">备份 / 还原 / 删除 · 删除进回收站</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-pills mb-3" id="saveTabs">
+                        <li class="nav-item"><button class="nav-link active" data-savetab="worlds" onclick="switchSaveTab('worlds')"><i class="fas fa-globe me-1"></i>世界 <span class="badge text-bg-secondary ms-1" id="saveWorldCount">0</span></button></li>
+                        <li class="nav-item"><button class="nav-link" data-savetab="players" onclick="switchSaveTab('players')"><i class="fas fa-user me-1"></i>人物 <span class="badge text-bg-secondary ms-1" id="savePlayerCount">0</span></button></li>
+                        <li class="nav-item"><button class="nav-link" data-savetab="backups" onclick="switchSaveTab('backups')"><i class="fas fa-clock-rotate-left me-1"></i>备份 <span class="badge text-bg-secondary ms-1" id="saveBackupCount">0</span></button></li>
+                    </ul>
+                    <div id="savesDirHint" class="text-secondary small mb-2" style="word-break:break-all;"></div>
+                    <div id="savesList" class="saves-list"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-outline-info" onclick="openSaveFolder()"><i class="fas fa-folder-open me-1"></i>打开所在文件夹</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 游玩统计 -->
+    <div class="modal fade" id="statsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-chart-line me-2 text-success"></i>游玩统计</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="stats-summary" id="statsSummary"></div>
+                    <h6 class="mt-4 mb-2"><i class="fas fa-layer-group me-1"></i>按版本</h6>
+                    <div id="statsVersions" class="stats-table"></div>
+                    <h6 class="mt-4 mb-2"><i class="fas fa-boxes me-1"></i>按整合包</h6>
+                    <div id="statsPacks" class="stats-table"></div>
+                    <h6 class="mt-4 mb-2"><i class="fas fa-clock-rotate-left me-1"></i>最近游玩</h6>
+                    <div id="statsRecent" class="stats-recent"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-outline-danger" onclick="resetStats()"><i class="fas fa-trash-alt me-1"></i>清空统计</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- enabled.json 快照（切换整合包前自动保存） -->
+    <div class="modal fade" id="snapshotsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-clock-rotate-left me-2 text-warning"></i>enabled.json 快照</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-secondary small mb-2">
+                        每次「启动整合包」前会自动把当时的 enabled.json 存一份，最多保留最近 <span id="snapKeep">10</span> 份。还原时当前那份也会先自动存成新快照，所以还原本身也能再回退。
+                    </div>
+                    <div id="snapshotsDirHint" class="text-secondary small mb-3" style="word-break:break-all;"></div>
+                    <div id="snapshotsList" class="saves-list"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-outline-secondary" onclick="openSnapshotsFolder()"><i class="fas fa-folder-open me-1"></i>打开快照文件夹</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏截图查看器 -->
+    <div class="modal fade" id="capturesModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-images me-2 text-info"></i>游戏截图 <span id="capturesCount" class="text-secondary small ms-2"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="capturesDirHint" class="text-secondary small mb-3" style="word-break:break-all;"></div>
+                    <div id="capturesGrid" class="capture-grid"></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-outline-secondary" onclick="openCapturesFolder()"><i class="fas fa-folder-open me-1"></i>打开截图文件夹</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 截图放大查看（灯箱）：覆盖在截图弹窗之上 -->
+    <div id="captureLightbox" style="display:none;">
+        <div class="cap-lb-panel">
+            <div class="cap-lb-bar">
+                <span id="capLbName" class="cap-lb-name"></span>
+                <span class="cap-lb-tools">
+                    <button class="btn btn-sm btn-outline-light" onclick="stepCapture(-1)" title="上一张（←）"><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-sm btn-outline-light" onclick="stepCapture(1)" title="下一张（→）"><i class="fas fa-chevron-right"></i></button>
+                    <button class="btn btn-sm btn-outline-light" onclick="closeCaptureLightbox()" title="关闭（Esc）"><i class="fas fa-xmark"></i></button>
+                </span>
+            </div>
+            <img id="capLbImg" src="" alt="">
+        </div>
+    </div>
+
+
+    <!-- 本地模组版本回滚（只针对本地 Mods 目录） -->
+    <div class="modal fade" id="modVersionsModal" tabindex="-1" data-bs-backdrop="static" data-bs-theme="dark">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content glass-card border-0">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title"><i class="fas fa-code-branch me-2 text-info"></i>本地模组版本 <span id="mvCount" class="text-secondary small ms-2"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-secondary small mb-2">
+                        <div id="mvModsDir" style="word-break:break-all;"></div>
+                        <div id="mvSnapDir" style="word-break:break-all;"></div>
+                    </div>
+                    <div class="mv-layout">
+                        <div class="mv-left">
+                            <input id="mvSearch" class="form-control form-control-sm mb-2" placeholder="搜索模组…" autocomplete="off" spellcheck="false">
+                            <div id="mvList" class="mv-list"></div>
+                        </div>
+                        <div id="mvDetail" class="mv-right"></div>
+                    </div>
+                    <div id="mvDropMask" class="mv-dropmask"><div class="mv-droptext"><i class="fas fa-file-arrow-down me-2"></i>松开即添加</div></div>
+                </div>
+                <div class="modal-footer border-0">
+                    <span class="mv-foot-tip text-secondary">把 .tmod 拖到左侧某个模组 = 加到它名下；拖到空白 = 按文件自己的模组名归位</span>
+                    <button class="btn btn-outline-secondary" onclick="openModVersionsFolder()"><i class="fas fa-folder-open me-1"></i>打开快照文件夹</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="mvFileInput" style="display:none">
+
+    <!-- 全局搜索 / 命令面板（Ctrl+K） -->
+    <div id="commandPalette" style="display:none;">
+        <div class="palette-backdrop" onclick="closeCommandPalette()"></div>
+        <div class="palette-panel" role="dialog" aria-modal="true" aria-label="命令面板">
+            <div class="palette-input-wrap">
+                <i class="fas fa-magnifying-glass"></i>
+                <input id="paletteInput" type="text" placeholder="搜索版本 / 整合包 / 模组，或输入命令…" autocomplete="off" spellcheck="false">
+                <kbd>Esc</kbd>
+            </div>
+            <div id="paletteResults" class="palette-results"></div>
+            <div class="palette-footer">
+                <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+                <span><kbd>Enter</kbd> 执行</span>
+                <span><kbd>Esc</kbd> 关闭</span>
+            </div>
+        </div>
+    </div>
 
     <script src="/static/vendor/bootstrap.bundle.min.js"></script>
     <script src="/static/script.js"></script>

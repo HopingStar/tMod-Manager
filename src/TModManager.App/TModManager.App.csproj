@@ -17,6 +17,11 @@
     <Content Include="..\..\wwwroot\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- GPL-3.0 分发二进制时须随附协议全文：把仓库根的 LICENSE 放到 exe 旁边并打进发布包 -->
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- 构建/发布后删除未使用语言的卫星资源目录（cs/de/es/.../zh-Hant），保持输出目录干净。
        这些目录由 .NET 为多语言资源预留、本项目用不到（当前为空）。用 MSBuild 原生 RemoveDir，无引号转义问题。 -->
   <Target Name="RemoveUnusedSatelliteLangDirs" AfterTargets="Build;Publish">

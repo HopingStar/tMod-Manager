@@ -8,6 +8,7 @@ let globalPacks = [];
 let modalInstance = null;
 let statusInterval = null;
 let backendErrorShown = false;
+let dataWarningShown = false;   // data.json 读取异常只提示一次
 let errorModalInstance = null;
 let currentView = 'versions';  // 'versions' | 'packs'
 let specialStatus = { global_active: false, packs: {} };  // 特殊加载状态
@@ -199,18 +200,16 @@ function showErrorModal(message) {
         alert(message || '后端服务异常，请确保程序正在运行。');
         return;
     }
-    if (errorModalInstance) {
-        errorModalInstance.dispose();
-        errorModalInstance = null;
-    }
     document.getElementById('errorMessage').textContent = message || '后端服务异常，请确保程序正在运行。';
     const modalEl = document.getElementById('errorModal');
-    errorModalInstance = new bootstrap.Modal(modalEl, {
-        backdrop: true,
+    // 复用同一实例：反复 dispose() + new 会在上一次「显示过渡」尚未结束时，
+    // 让 Bootstrap 的 _showElement 拿到已置空的元素而抛错（后端不可达时会连续触发两次）。
+    errorModalInstance = bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop: 'static',
         keyboard: true,
         focus: true
     });
-    errorModalInstance.show();
+    if (!modalEl.classList.contains('show')) errorModalInstance.show();
 }
 
 // ---------- 通用提示 / 确认模态框（替代原生 alert/confirm） ----------
@@ -223,11 +222,13 @@ function showAppAlert(message, title = '提示') {
     if (typeof bootstrap === 'undefined') { _nativeAlert(message); return; }
     document.getElementById('appAlertTitle').textContent = title;
     document.getElementById('appAlertMsg').textContent = message || '';
-    if (_appAlertModal) _appAlertModal.dispose();
-    _appAlertModal = new bootstrap.Modal(document.getElementById('appAlertModal'), {
-        backdrop: true, keyboard: true
+    // 复用同一实例：反复 dispose() + new 会在上一次「显示过渡」尚未结束时，
+    // 让 Bootstrap 的 _showElement 拿到已置空的元素而抛错。
+    const modalEl = document.getElementById('appAlertModal');
+    _appAlertModal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop: 'static', keyboard: true
     });
-    _appAlertModal.show();
+    if (!modalEl.classList.contains('show')) _appAlertModal.show();
 }
 
 // 顶部下拉 Toast：向下淡入，5s 递减进度条（从右到左耗尽）结束后向上淡出。
@@ -266,11 +267,12 @@ function showAppConfirm(message, onConfirm, title = '确认') {
     _appConfirmCb = onConfirm;
     document.getElementById('appConfirmTitle').textContent = title;
     document.getElementById('appConfirmMsg').textContent = message || '';
-    if (_appConfirmModal) _appConfirmModal.dispose();
-    _appConfirmModal = new bootstrap.Modal(document.getElementById('appConfirmModal'), {
-        backdrop: true, keyboard: true
+    // 同上：复用实例，避免 dispose + new 的过渡竞态
+    const modalEl = document.getElementById('appConfirmModal');
+    _appConfirmModal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop: 'static', keyboard: true
     });
-    _appConfirmModal.show();
+    if (!modalEl.classList.contains('show')) _appConfirmModal.show();
 }
 
 // ========== 剪贴板复制（描述/简介） ==========
@@ -337,6 +339,11 @@ async function fetchStatus() {
         (data.missing_packs || []).forEach(x => { if (x && x.id) missingPackInfo[x.id] = x.name || x.id; });
         updateMissingMarkers();
         backendErrorShown = false;
+        // 配置文件损坏 / 已从备份恢复：只提示一次，别让用户以为版本被删了
+        if (data.data_warning && !dataWarningShown) {
+            dataWarningShown = true;
+            showAppAlert(data.data_warning, '配置读取异常');
+        }
     } catch (e) {
         updateTmodStatus(false);
         document.getElementById('lastLaunchText').textContent = '无法连接后端';
@@ -364,7 +371,9 @@ function updateMissingMarkers() {
 }
 
 function updateTmodStatus(running) {
+    const _changed = (tmodRunning !== !!running);
     tmodRunning = !!running;
+    if (_changed) loadStats();   // 启动 / 退出边沿：后端统计已更新，拉一次
     updateCardHighlights();   // 运行状态变化 → 同步版本卡片辉光
     const dot = document.getElementById('tmodIndicator');
     const text = document.getElementById('tmodText');
@@ -375,8 +384,8 @@ function updateTmodStatus(running) {
         text.textContent = '运行中';
         text.style.color = '#28a745';
         killBtn.style.display = 'inline-block';
-        // 禁用所有启动和还原按钮（运行中改写 enabled.json 无意义且易混淆）
-        document.querySelectorAll('.launch-btn, .restore-btn').forEach(btn => {
+        // 禁用启动按钮（运行中改写 enabled.json 无意义且易混淆）
+        document.querySelectorAll('.launch-btn').forEach(btn => {
             btn.disabled = true;
             btn.title = '游戏正在运行，无法操作';
         });
@@ -386,7 +395,7 @@ function updateTmodStatus(running) {
         text.textContent = '未运行';
         text.style.color = '#6c757d';
         killBtn.style.display = 'none';
-        document.querySelectorAll('.launch-btn, .restore-btn').forEach(btn => {
+        document.querySelectorAll('.launch-btn').forEach(btn => {
             btn.disabled = false;
             btn.title = '';
         });
@@ -522,7 +531,7 @@ function renderVersions() {
         html += `
         <div class="card glass-card mb-4 border-0 version-card${staggerCls}"${staggerStyle} data-version="${v.id}">
             <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                <div><span class="last-launch-badge">上次启动</span><i class="fas fa-folder-open text-warning me-2"></i><strong>${escapeHtml(label)}</strong>${updateBadge}</div>
+                <div><span class="last-launch-badge">上次启动</span><i class="fas fa-folder-open text-warning me-2"></i><strong>${escapeHtml(label)}</strong>${updateBadge}<span class="play-count-badge" data-play-version="${v.id}" style="display:none;"></span></div>
                 <div class="d-flex align-items-center">
                     <button class="btn btn-sm btn-success me-1" data-action="launchDirect" data-version="${v.id}" title="直接启动：使用当前 Mods 目录的 enabled.json 启动该版本，不做任何修改（不覆盖 enabled.json）">
                         <i class="fas fa-play me-1"></i>直接启动
@@ -535,9 +544,6 @@ function renderVersions() {
                     </button>
                     <button class="fav-btn me-1" data-action="toggleFavVersion" data-version="${v.id}" title="收藏 / 取消收藏">
                         <i class="${starIcon}"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-warning restore-btn" data-action="restoreVersion" data-version="${v.id}">
-                        <i class="fas fa-undo-alt"></i> 还原
                     </button>
                 </div>
             </div>
@@ -556,6 +562,7 @@ function renderVersions() {
     container.innerHTML = html;
     updateMissingMarkers();
     updateCardHighlights();   // 标记「上次启动 / 运行中」卡片
+    updatePlayBadges();       // 启动次数徽章
 }
 
 // 渲染整合包列表（纵向）
@@ -597,7 +604,6 @@ document.getElementById('versionList').addEventListener('click', async (e) => {
     else if (action === 'launchDirect') await launchDirect(versionId);
     else if (action === 'addPackToVersion') openModal(versionId);   // 打开「添加整合包」选择弹窗
     else if (action === 'viewVersionMods') await openVersionMods(versionId);
-    else if (action === 'restoreVersion') await restoreVersion(versionId);
     else if (action === 'launch') await launchPack(versionId, packId);
     else if (action === 'removePack') await removePack(versionId, packId);
     else if (action === 'toggleFavVersion') {
@@ -1870,6 +1876,7 @@ function applyMetaSettings(ms) {
     if (typeof ms.tmod_update === 'boolean') tmodUpdateCheck = ms.tmod_update;
     if (typeof ms.tmod_update_ignore_preview === 'boolean') tmodUpdateIgnorePreview = ms.tmod_update_ignore_preview;
     if (typeof ms.bg_glow === 'boolean') { bgGlow = ms.bg_glow; applyBgGlow(); }
+    if (typeof ms.theme === 'string') { themeMode = ms.theme; applyTheme(); }
     const sync = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
     // 全局设置弹窗里的开关（data-mskey 驱动，与特殊加载弹窗里的旧 ID 开关并行）
     const syncMs = (key, val) => { document.querySelectorAll(`[data-mskey="${key}"]`).forEach(el => { el.checked = val; }); };
@@ -2380,7 +2387,39 @@ async function pickBatFile(inputId) {
 
 // ---------- 直接启动某版本（不做任何修改） ----------
 // 「直接启动」：用该版本的 .bat 启动，使用当前 Mods 目录的 enabled.json，不覆盖 enabled.json、不应用特殊加载
+// ---------- 启动前的「缺失模组」体检（只提示、不阻断） ----------
+// 比对「该版本可用的模组（本地 Mods ∪ 该版本 Workshop）」与「enabled.json 里启用的模组」。
+async function checkMissingMods(versionId) {
+    try {
+        const res = await fetch(`/api/versions/${encodeURIComponent(versionId)}/missing_mods`);
+        if (!res.ok) return null;              // 体检本身失败不阻断启动
+        return await res.json();
+    } catch { return null; }
+}
+
+/** 缺失模组的确认文案；没有缺失返回 null。 */
+function missingModsMessage(info) {
+    const names = (info && info.missing) || [];
+    if (!names.length) return null;
+    const head = names.slice(0, 10).join('、');
+    const tail = names.length > 10 ? ` 等 ${names.length} 个` : '';
+    return `当前 enabled.json 里的 ${names.length} 个模组在该版本中找不到：\n\n${head}${tail}\n\n继续启动的话，这些模组不会被加载。仍然继续吗？`;
+}
+
+/** 有缺失就先让用户确认（仍可继续），没有就直接启动。 */
+function confirmMissingThen(versionId, doLaunch) {
+    checkMissingMods(versionId).then(info => {
+        const msg = missingModsMessage(info);
+        if (msg) showAppConfirm(msg, doLaunch, '缺少模组');
+        else doLaunch();
+    });
+}
+
 async function launchDirect(versionId) {
+    confirmMissingThen(versionId, () => _doLaunchDirect(versionId));
+}
+
+async function _doLaunchDirect(versionId) {
     try {
         const res = await fetch(`/api/versions/${encodeURIComponent(versionId)}/launch_direct`, { method: 'POST' });
         const data = await res.json();
@@ -2397,6 +2436,10 @@ async function launchDirect(versionId) {
 
 // 「以特殊加载配置启动」：应用全局特殊加载配置后启动该版本（禁用列表内本地模组，退出自动还原）
 async function launchSpecial(versionId) {
+    confirmMissingThen(versionId, () => _doLaunchSpecial(versionId));
+}
+
+async function _doLaunchSpecial(versionId) {
     try {
         const res = await fetch(`/api/versions/${encodeURIComponent(versionId)}/launch_special`, { method: 'POST' });
         let data = {};
@@ -2487,11 +2530,154 @@ async function deleteVersion(versionId) {
     });
 }
 
-async function restoreVersion(versionId) {
-    showAppConfirm('将还原该版本的 enabled.json 到上次启动前的状态，确定？', async () => {
-        const res = await fetch(`/api/versions/${versionId}/restore`, { method: 'POST' });
-        const data = await res.json();
-        showAppAlert(data.message || data.error);
+/* ============================================================
+   模块：enabled.json 快照（切换整合包前自动保存，可逐份还原）
+   ============================================================ */
+// 快照是全局的（所有版本共用一个 Mods 目录），入口统一放在顶部工具栏
+function openSnapshotsModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('snapshotsModal')).show();
+    loadSnapshots();
+}
+
+async function loadSnapshots() {
+    const list = document.getElementById('snapshotsList');
+    list.innerHTML = skeletonHtml(3);
+    let d = null;
+    try { d = await (await fetch('/api/snapshots')).json(); } catch (e) { d = null; }
+
+    const dirEl = document.getElementById('snapshotsDirHint');
+    if (dirEl) dirEl.textContent = d && d.root ? '目录：' + d.root : '';
+    if (d) { const k = document.getElementById('snapKeep'); if (k) k.textContent = d.keep; }
+
+    const items = (d && d.snapshots) || [];
+    if (!items.length) {
+        list.innerHTML = emptyInlineHtml('fa-clock-rotate-left', '还没有快照。每次「启动整合包」前会自动存一份。');
+        return;
+    }
+    list.innerHTML = items.map(s => `
+        <div class="save-item">
+            <div class="save-main">
+                <div class="save-name"><i class="fas fa-clock-rotate-left me-2 text-warning"></i>${escapeHtml(s.label || s.id)}</div>
+                <div class="save-meta">${s.count >= 0 ? s.count + ' 个模组 · ' : ''}${fmtDateTime(s.created)}</div>
+            </div>
+            <div class="save-actions">
+                <button class="btn btn-sm btn-outline-success" data-snap-restore="${escapeHtml(s.id)}" title="把这份 enabled.json 写回 Mods 目录"><i class="fas fa-rotate-left me-1"></i>还原</button>
+            </div>
+        </div>`).join('');
+}
+
+function restoreSnapshot(id) {
+    showAppConfirm('将把这份快照写回 Mods 目录的 enabled.json。当前那份会先自动存成新快照（所以还原也能再回退）。确定？', async () => {
+        try {
+            const res = await fetch('/api/snapshots/restore', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const d = await res.json();
+            if (!res.ok) { showAppAlert(d.error || '还原失败'); return; }
+            showToast(d.message || '已还原', '还原完成');
+            loadSnapshots();
+        } catch (e) { showAppAlert('还原失败: ' + e.message); }
+    });
+}
+
+function openSnapshotsFolder() {
+    fetch('/api/snapshots/open_folder', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => { if (d && d.error) showAppAlert(d.error); })
+        .catch(e => showAppAlert('打开失败: ' + e.message));
+}
+
+/* ============================================================
+   模块：游戏截图查看器（存档目录下的 Captures/）
+   ============================================================ */
+let _captures = [];
+let _capIndex = -1;
+
+function openCapturesModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('capturesModal')).show();
+    loadCaptures();
+}
+
+async function loadCaptures() {
+    const grid = document.getElementById('capturesGrid');
+    grid.innerHTML = skeletonHtml(6);
+    let d = null;
+    try { d = await (await fetch('/api/captures')).json(); } catch (e) { d = null; }
+
+    _captures = (d && d.captures) || [];
+    const dirEl = document.getElementById('capturesDirHint');
+    if (dirEl) dirEl.textContent = d && d.dir ? '目录：' + d.dir : '';
+    const cnt = document.getElementById('capturesCount');
+    if (cnt) cnt.textContent = _captures.length ? '共 ' + _captures.length + ' 张' : '';
+
+    if (!_captures.length) {
+        grid.innerHTML = emptyInlineHtml('fa-images', '截图目录里还没有图片。游戏里按 F12 截图后会出现在这里。');
+        return;
+    }
+    grid.innerHTML = _captures.map((c, i) => `
+        <div class="capture-item" data-cap-idx="${i}" title="${escapeHtml(c.file_name)}">
+            <img loading="lazy" decoding="async" src="/api/captures/image?path=${encodeURIComponent(c.path)}" alt="${escapeHtml(c.file_name)}">
+            <div class="capture-name">${escapeHtml(c.file_name)}</div>
+            <div class="capture-meta">${fmtSize(c.size)} · ${fmtDateTime(c.modified)}</div>
+        </div>`).join('');
+}
+
+function openCaptureLightbox(idx) {
+    if (idx < 0 || idx >= _captures.length) return;
+    _capIndex = idx;
+    const c = _captures[idx];
+    document.getElementById('capLbImg').src = '/api/captures/image?path=' + encodeURIComponent(c.path);
+    document.getElementById('capLbName').textContent = c.file_name;
+    document.getElementById('captureLightbox').style.display = 'flex';
+}
+
+function stepCapture(delta) {
+    if (_capIndex < 0 || !_captures.length) return;
+    openCaptureLightbox((_capIndex + delta + _captures.length) % _captures.length);
+}
+
+function closeCaptureLightbox() {
+    _capIndex = -1;
+    const lb = document.getElementById('captureLightbox');
+    if (lb) lb.style.display = 'none';
+    const img = document.getElementById('capLbImg');
+    if (img) img.src = '';
+}
+
+function openCapturesFolder() {
+    fetch('/api/captures/open_folder', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => { if (d && d.error) showAppAlert(d.error); })
+        .catch(e => showAppAlert('打开失败: ' + e.message));
+}
+
+function initCapturesModal() {
+    const grid = document.getElementById('capturesGrid');
+    if (grid) grid.addEventListener('click', e => {
+        const item = e.target.closest('[data-cap-idx]');
+        if (item) openCaptureLightbox(Number(item.dataset.capIdx) || 0);
+    });
+    // 灯箱开着时接管键盘（capture 阶段 + stopPropagation，避免 Esc 顺手把整个弹窗也关了）
+    document.addEventListener('keydown', e => {
+        if (_capIndex < 0) return;
+        const k = (e.key || '').toLowerCase();
+        if (k === 'escape') { e.preventDefault(); e.stopPropagation(); closeCaptureLightbox(); }
+        else if (k === 'arrowleft') { e.preventDefault(); stepCapture(-1); }
+        else if (k === 'arrowright') { e.preventDefault(); stepCapture(1); }
+    }, true);
+    const modal = document.getElementById('capturesModal');
+    if (modal) modal.addEventListener('hidden.bs.modal', closeCaptureLightbox);
+}
+
+function initSnapshotsModal() {
+    const el = document.getElementById('snapshotsList');
+    if (!el) return;
+    el.addEventListener('click', e => {
+        const btn = e.target.closest('[data-snap-restore]');
+        if (btn) restoreSnapshot(btn.dataset.snapRestore);
     });
 }
 
@@ -2583,12 +2769,13 @@ async function removePack(versionId, packId) {
 }
 
 async function launchPack(versionId, packId) {
-    showAppConfirm('启动将覆盖该版本的 enabled.json，是否继续？', async () => {
+    showAppConfirm('启动将用该整合包覆盖当前的 enabled.json。当前配置会先自动存成快照（可回退）。是否继续？', async () => {
         try {
             const res = await fetch(`/api/versions/${versionId}/launch/${packId}`, { method: 'POST' });
             const data = await res.json();
             if (res.ok) {
-                showToast(data.message, '启动成功');
+                showToast(data.warning ? data.message + ' ' + data.warning : data.message,
+                          data.warning ? '启动成功（注意）' : '启动成功');
                 // 刷新状态以更新运行中标志
                 fetchStatus();
             } else {
@@ -2845,3 +3032,956 @@ startTooltipFlowLoop();   // 全局计时：tooltip 边框流光（与悬浮时�
 startBootTextRotation();  // 启动遮罩文案轮播
 // 首次启动：版本号在后台预热检测（PowerShell ~4s），完成后再静默刷新一次显示
 setTimeout(loadData, 6000);
+
+/* ============================================================
+   模块：通用格式化
+   ============================================================ */
+function fmtDateTime(v) {
+    if (!v) return '-';
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return '-';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtDuration(sec) {
+    let t = Math.max(0, Math.floor(sec || 0));
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    if (h > 0) return `${h} 小时 ${m} 分`;
+    if (m > 0) return `${m} 分 ${s} 秒`;
+    return `${s} 秒`;
+}
+
+function fmtSize(n) {
+    if (n == null) return '-';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+// 关掉可能残留的遮罩再开新弹窗（与既有各 openXxx 一致的写法）
+function _clearModalBackdrop() {
+    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+    document.body.classList.remove('modal-open');
+}
+
+/* ============================================================
+   模块：浅色 / 深色主题
+   ============================================================ */
+let themeMode = 'dark';              // dark | light | system
+const _sysLightMq = window.matchMedia('(prefers-color-scheme: light)');
+
+function resolvedTheme() {
+    if (themeMode === 'system') return _sysLightMq.matches ? 'light' : 'dark';
+    return themeMode === 'light' ? 'light' : 'dark';
+}
+
+function applyTheme() {
+    const t = resolvedTheme();
+    document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.setAttribute('data-bs-theme', t);
+    // 各模态框自带 data-bs-theme="dark"，需一起跟随，否则浅色下弹窗仍是深色
+    document.querySelectorAll('.modal').forEach(m => m.setAttribute('data-bs-theme', t));
+    const sw = document.getElementById('themeSwitch');
+    if (sw) sw.querySelectorAll('[data-theme-opt]').forEach(b =>
+        b.classList.toggle('active', b.dataset.themeOpt === themeMode));
+}
+
+function setTheme(mode) {
+    themeMode = mode;
+    applyTheme();
+    saveMetaSetting('theme', mode);
+}
+
+function bindThemeSwitch() {
+    const sw = document.getElementById('themeSwitch');
+    if (sw) sw.querySelectorAll('[data-theme-opt]').forEach(b =>
+        b.addEventListener('click', () => setTheme(b.dataset.themeOpt || 'dark')));
+    if (_sysLightMq.addEventListener)
+        _sysLightMq.addEventListener('change', () => { if (themeMode === 'system') applyTheme(); });
+}
+
+/* ============================================================
+   模块：崩溃日志查看器
+   ============================================================ */
+let _logFiles = [];
+let _logCurrent = null;
+let _logContent = null;
+
+function openLogsModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('logsModal')).show();
+    refreshLogs();
+}
+
+async function refreshLogs() {
+    try {
+        _logFiles = await (await fetch('/api/logs')).json();
+    } catch (e) { _logFiles = []; }
+    const layout = document.getElementById('logLayout');
+    const hint = document.getElementById('logsEmptyHint');
+    if (!Array.isArray(_logFiles) || !_logFiles.length) {
+        layout.style.display = 'none';
+        hint.style.display = '';
+        return;
+    }
+    hint.style.display = 'none';
+    layout.style.display = '';
+    renderLogFileList();
+    if (!_logCurrent || !_logFiles.some(f => f.path === _logCurrent.path))
+        await loadLogContent(_logFiles[0]);
+}
+
+function renderLogFileList() {
+    const el = document.getElementById('logFileList');
+    el.innerHTML = _logFiles.map(f => {
+        const active = (_logCurrent && _logCurrent.path === f.path) ? ' active' : '';
+        return `<button type="button" class="log-file-item${active}" data-log-path="${escapeHtml(f.path)}">
+            <div class="log-file-name">${escapeHtml(f.name)}</div>
+            <div class="log-file-meta">${fmtSize(f.size)} · ${fmtDateTime(f.modified)}</div>
+        </button>`;
+    }).join('');
+}
+
+async function loadLogContent(file) {
+    _logCurrent = file;
+    renderLogFileList();
+    const viewer = document.getElementById('logViewer');
+    viewer.textContent = '读取中…';
+    try {
+        const res = await fetch('/api/logs/content?path=' + encodeURIComponent(file.path));
+        if (!res.ok) { _logContent = null; viewer.textContent = '读取失败'; return; }
+        _logContent = await res.json();
+    } catch (e) {
+        _logContent = null; viewer.textContent = '读取失败: ' + e.message; return;
+    }
+    renderLogContent();
+    scrollLogToEnd();
+}
+
+function renderLogContent() {
+    const viewer = document.getElementById('logViewer');
+    const cntEl = document.getElementById('logErrorCount');
+    if (!_logContent) { viewer.innerHTML = ''; cntEl.textContent = ''; return; }
+
+    const errors = new Set(_logContent.error_lines || []);
+    const onlyErrors = !!document.getElementById('logOnlyErrors')?.checked;
+    const lines = (_logContent.text || '').split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+        const isErr = errors.has(i + 1);
+        if (onlyErrors && !isErr) continue;
+        // 行号取原始行号（筛选后仍指向文件中的真实行）；正文不换行，超长靠横向滚动
+        out.push(`<div class="log-row${isErr ? ' log-row-error' : ''}">`
+            + `<span class="log-gutter">${i + 1}</span>`
+            + `<span class="log-text">${escapeHtml(lines[i])}</span></div>`);
+    }
+    viewer.innerHTML = out.length ? out.join('')
+        : '<div class="log-empty text-secondary">没有匹配的错误行</div>';
+    let info = errors.size ? `${errors.size} 行疑似错误` : '未发现明显错误';
+    if (_logContent.truncated) info += '（文件过大，仅显示末尾）';
+    cntEl.textContent = info;
+}
+
+function scrollLogToEnd() {
+    const v = document.getElementById('logViewer');
+    if (v) v.scrollTop = v.scrollHeight;
+}
+
+function copyLogText() {
+    if (!_logContent) return;
+    const done = () => showToast('日志已复制到剪贴板', '已复制');
+    const fail = () => showAppAlert('复制失败：浏览器拒绝了剪贴板访问');
+    if (navigator.clipboard && navigator.clipboard.writeText)
+        navigator.clipboard.writeText(_logContent.text).then(done, fail);
+    else fail();
+}
+
+async function openLogFolder() {
+    const path = (_logCurrent && _logCurrent.path) || (_logFiles[0] && _logFiles[0].path) || '';
+    if (!path) { showAppAlert('没有可打开的日志目录'); return; }
+    try {
+        const res = await fetch('/api/logs/open_folder', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+        const d = await res.json();
+        if (!res.ok) showAppAlert(d.error || '打开失败');
+    } catch (e) { showAppAlert('打开失败: ' + e.message); }
+}
+
+function initLogsModal() {
+    const list = document.getElementById('logFileList');
+    if (list) list.addEventListener('click', e => {
+        const btn = e.target.closest('[data-log-path]');
+        if (!btn) return;
+        const f = _logFiles.find(x => x.path === btn.dataset.logPath);
+        if (f) loadLogContent(f);
+    });
+    const only = document.getElementById('logOnlyErrors');
+    if (only) only.addEventListener('change', renderLogContent);
+}
+
+/* ============================================================
+   模块：存档管理（世界 / 人物）
+   ============================================================ */
+let _saves = { worlds: [], players: [], backups: [] };
+let _saveTab = 'worlds';
+
+function openSavesModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('savesModal')).show();
+    switchSaveTab('worlds');
+    loadSaves();
+}
+
+async function loadSaves() {
+    try {
+        _saves = await (await fetch('/api/saves')).json();
+    } catch (e) { _saves = { worlds: [], players: [], backups: [] }; }
+    const setN = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+    setN('saveWorldCount', (_saves.worlds || []).length);
+    setN('savePlayerCount', (_saves.players || []).length);
+    setN('saveBackupCount', (_saves.backups || []).length);
+    renderSaves();
+}
+
+function switchSaveTab(tab) {
+    _saveTab = tab;
+    document.querySelectorAll('#saveTabs [data-savetab]').forEach(b =>
+        b.classList.toggle('active', b.dataset.savetab === tab));
+    renderSaves();
+}
+
+function renderSaves() {
+    const el = document.getElementById('savesList');
+    const dirEl = document.getElementById('savesDirHint');
+    if (dirEl) {
+        const dir = _saveTab === 'players' ? _saves.players_dir
+            : (_saveTab === 'backups' ? _saves.backup_dir : _saves.worlds_dir);
+        dirEl.textContent = dir ? '目录：' + dir : '';
+    }
+    const list = _saves[_saveTab] || [];
+    if (!list.length) {
+        el.innerHTML = emptyInlineHtml('fa-inbox', _saveTab === 'backups'
+            ? '还没有备份。点任意存档右侧的「备份」按钮生成。'
+            : '没有找到存档文件。请确认游戏存档目录下存在 Worlds / Players。');
+        return;
+    }
+    if (_saveTab === 'backups') {
+        el.innerHTML = list.map(b => `
+            <div class="save-item">
+                <div class="save-main">
+                    <div class="save-name"><i class="fas fa-file-zipper me-2 text-warning"></i>${escapeHtml(b.original_name)}</div>
+                    <div class="save-meta">${b.kind === 'player' ? '人物' : '世界'} · ${fmtSize(b.size)} · ${fmtDateTime(b.created)}</div>
+                </div>
+                <div class="save-actions">
+                    <button class="btn btn-sm btn-outline-success" data-save-action="restore" data-path="${escapeHtml(b.path)}" title="还原回存档目录（覆盖同名文件）"><i class="fas fa-rotate-left me-1"></i>还原</button>
+                    <button class="btn btn-sm btn-outline-danger" data-save-action="delete-backup" data-path="${escapeHtml(b.path)}" title="删除这份备份"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            </div>`).join('');
+        return;
+    }
+    el.innerHTML = list.map(s => `
+        <div class="save-item">
+            <div class="save-main">
+                <div class="save-name"><i class="fas ${s.kind === 'player' ? 'fa-user' : 'fa-globe'} me-2 text-info"></i>${escapeHtml(s.name)}</div>
+                <div class="save-meta">${escapeHtml(s.file_name)} · ${fmtSize(s.size)} · ${fmtDateTime(s.modified)}${s.backup_count ? ' · 已有 ' + s.backup_count + ' 份备份' : ''}</div>
+            </div>
+            <div class="save-actions">
+                <button class="btn btn-sm btn-outline-info" data-save-action="backup" data-kind="${escapeHtml(s.kind)}" data-path="${escapeHtml(s.path)}" title="备份为 zip（存到程序目录 backups/saves）"><i class="fas fa-box-archive me-1"></i>备份</button>
+                <button class="btn btn-sm btn-outline-secondary" data-save-action="reveal" data-kind="${escapeHtml(s.kind)}" data-path="${escapeHtml(s.path)}" title="在资源管理器中定位"><i class="fas fa-folder-open"></i></button>
+                <button class="btn btn-sm btn-outline-danger" data-save-action="delete" data-kind="${escapeHtml(s.kind)}" data-path="${escapeHtml(s.path)}" title="删除（进回收站，可找回）"><i class="fas fa-trash-alt"></i></button>
+            </div>
+        </div>`).join('');
+}
+
+async function _saveAction(url, body) {
+    const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { showAppAlert(d.error || '操作失败'); return null; }
+    return d;
+}
+
+async function backupSaveItem(kind, path) {
+    const d = await _saveAction('/api/saves/backup', { kind, path });
+    if (!d) return;
+    showToast(`已备份为 ${d.backup}`, '备份完成');
+    loadSaves();
+}
+
+async function restoreSaveBackup(path) {
+    showAppConfirm('确定用这份备份覆盖当前存档吗？当前内容会被替换。', async () => {
+        const d = await _saveAction('/api/saves/restore', { path });
+        if (!d) return;
+        showToast('已还原到存档目录', '还原完成');
+        loadSaves();
+    });
+}
+
+async function deleteSaveItem(kind, path, isBackup) {
+    showAppConfirm(isBackup ? '确定删除这份备份吗？' : '确定删除这个存档吗？（会送进回收站，可找回）', async () => {
+        const d = await _saveAction('/api/saves/delete', { kind, path, backup: !!isBackup });
+        if (!d) return;
+        showToast(d.message || '已删除', '已删除');
+        loadSaves();
+    });
+}
+
+async function revealSaveItem(kind, path) {
+    await _saveAction('/api/saves/open_folder', { kind, path });
+}
+
+async function openSaveFolder() {
+    const kind = _saveTab === 'players' ? 'player' : 'world';
+    await _saveAction('/api/saves/open_folder', { kind });
+}
+
+function initSavesModal() {
+    const el = document.getElementById('savesList');
+    if (!el) return;
+    el.addEventListener('click', e => {
+        const btn = e.target.closest('[data-save-action]');
+        if (!btn) return;
+        const a = btn.dataset.saveAction, path = btn.dataset.path || '', kind = btn.dataset.kind || 'world';
+        if (a === 'backup') backupSaveItem(kind, path);
+        else if (a === 'restore') restoreSaveBackup(path);
+        else if (a === 'delete') deleteSaveItem(kind, path, false);
+        else if (a === 'delete-backup') deleteSaveItem(kind, path, true);
+        else if (a === 'reveal') revealSaveItem(kind, path);
+    });
+}
+
+/* ============================================================
+   模块：游玩统计（启动次数 / 累计时长）
+   ============================================================ */
+let playStats = null;
+
+async function loadStats() {
+    try {
+        playStats = await (await fetch('/api/stats')).json();
+    } catch (e) { playStats = null; }
+    updatePlayBadges();
+}
+
+function statsLaunches(versionId) {
+    if (!playStats || !playStats.version_launches) return 0;
+    return playStats.version_launches[versionId] || 0;
+}
+
+function versionLabel(id) {
+    const v = (versions || []).find(x => x.id === id);
+    return v ? `${v.name}${v.version_info ? '（' + v.version_info + '）' : ''}` : id;
+}
+
+function packLabel(id) {
+    const p = (globalPacks || []).find(x => x.id === id);
+    return p ? (p.name || id) : id;
+}
+
+function updatePlayBadges() {
+    document.querySelectorAll('[data-play-version]').forEach(el => {
+        const n = statsLaunches(el.dataset.playVersion);
+        el.style.display = n > 0 ? '' : 'none';
+        el.innerHTML = `<i class="fas fa-play me-1"></i>启动 ${n} 次`;
+    });
+}
+
+function openStatsModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('statsModal')).show();
+    renderStatsModal();
+}
+
+async function renderStatsModal() {
+    const sum = document.getElementById('statsSummary');
+    const vEl = document.getElementById('statsVersions');
+    const pEl = document.getElementById('statsPacks');
+    const rEl = document.getElementById('statsRecent');
+    sum.innerHTML = skeletonHtml(2);
+    vEl.innerHTML = ''; pEl.innerHTML = ''; rEl.innerHTML = '';
+
+    await loadStats();
+    const s = playStats;
+    if (!s) { sum.innerHTML = emptyInlineHtml('fa-triangle-exclamation', '读取统计失败'); return; }
+
+    const totalLaunches = Object.values(s.version_launches || {}).reduce((a, b) => a + b, 0);
+    const playedVersions = Object.keys(s.version_launches || {}).length;
+    const a = s.active;
+    sum.innerHTML = `
+        <div class="stat-card"><div class="stat-value">${totalLaunches}</div><div class="stat-label">总启动次数</div></div>
+        <div class="stat-card"><div class="stat-value">${fmtDuration(s.total_seconds)}</div><div class="stat-label">累计游玩时长</div></div>
+        <div class="stat-card"><div class="stat-value">${playedVersions}</div><div class="stat-label">玩过的版本</div></div>`
+        + (a ? `<div class="stat-card stat-live"><div class="stat-value">${escapeHtml(versionLabel(a.version_id))}</div><div class="stat-label">运行中 · 已玩 ${fmtDuration(a.elapsed_seconds)}</div></div>` : '');
+
+    const vRows = Object.entries(s.version_launches || {})
+        .map(([id, n]) => ({ id, n, sec: (s.version_seconds || {})[id] || 0 }))
+        .sort((x, y) => y.n - x.n);
+    vEl.innerHTML = vRows.length ? vRows.map(r => `
+        <div class="stats-row">
+            <span class="stats-name">${escapeHtml(versionLabel(r.id))}</span>
+            <span class="stats-cell">${r.n} 次</span>
+            <span class="stats-cell">${fmtDuration(r.sec)}</span>
+        </div>`).join('')
+        : emptyInlineHtml('fa-layer-group', '还没有版本启动记录');
+
+    const pRows = Object.entries(s.pack_launches || {})
+        .map(([id, n]) => ({ id, n, sec: (s.pack_seconds || {})[id] || 0 }))
+        .sort((x, y) => y.n - x.n);
+    pEl.innerHTML = pRows.length ? pRows.map(r => `
+        <div class="stats-row">
+            <span class="stats-name">${escapeHtml(packLabel(r.id))}</span>
+            <span class="stats-cell">${r.n} 次</span>
+            <span class="stats-cell">${fmtDuration(r.sec)}</span>
+        </div>`).join('')
+        : emptyInlineHtml('fa-boxes', '还没有整合包启动记录');
+
+    const recent = s.recent || [];
+    rEl.innerHTML = recent.length ? recent.slice(0, 12).map(r => `
+        <div class="stats-recent-row">
+            <span class="stats-name">${escapeHtml(versionLabel(r.version_id))}${r.pack_id ? ' · ' + escapeHtml(packLabel(r.pack_id)) : ''}</span>
+            <span class="text-secondary small">${fmtDateTime(r.started_at)}</span>
+            <span class="stats-cell">${fmtDuration(r.seconds)}</span>
+        </div>`).join('')
+        : emptyInlineHtml('fa-clock-rotate-left', '还没有游玩记录');
+}
+
+function resetStats() {
+    showAppConfirm('确定清空全部游玩统计吗？版本与整合包本身不受影响。', async () => {
+        try {
+            const res = await fetch('/api/stats/reset', { method: 'POST' });
+            const d = await res.json();
+            if (!res.ok) { showAppAlert(d.error || '清空失败'); return; }
+            showToast(d.message || '统计已清空', '已清空');
+            renderStatsModal();
+        } catch (e) { showAppAlert('清空失败: ' + e.message); }
+    });
+}
+
+/* ============================================================
+   模块：全局搜索 / 命令面板（Ctrl+K）
+   ============================================================ */
+let _paletteItems = [];
+let _paletteSel = 0;
+let _paletteOpen = false;
+
+function paletteCommands() {
+    return [
+        { group: '命令', icon: 'fa-cog', label: '打开全局设置', hint: '设置', run: () => openSettings() },
+        { group: '命令', icon: 'fa-file-lines', label: '崩溃日志查看器', hint: '工具', run: () => openLogsModal() },
+        { group: '命令', icon: 'fa-box-archive', label: '存档管理（世界 / 人物）', hint: '工具', run: () => openSavesModal() },
+        { group: '命令', icon: 'fa-chart-line', label: '游玩统计', hint: '工具', run: () => openStatsModal() },
+        { group: '命令', icon: 'fa-play', label: '启动游戏（当前配置）', hint: '启动', run: () => launchCurrentNow() },
+        { group: '命令', icon: 'fa-th-list', label: '查看当前 enabled.json', hint: '模组', run: () => openCurrentEnabled() },
+        { group: '命令', icon: 'fa-plus', label: '添加版本', hint: '版本', run: () => openAddVersionModal() },
+        { group: '命令', icon: 'fa-folder-open', label: '打开 ModPacks 文件夹', hint: '文件', run: () => openModPacks() },
+        { group: '命令', icon: 'fa-moon', label: '切换到深色主题', hint: '外观', run: () => setTheme('dark') },
+        { group: '命令', icon: 'fa-sun', label: '切换到浅色主题', hint: '外观', run: () => setTheme('light') },
+        { group: '命令', icon: 'fa-desktop', label: '主题跟随系统', hint: '外观', run: () => setTheme('system') },
+        { group: '命令', icon: 'fa-boxes', label: '切换到整合包视图', hint: '视图', run: () => switchView('packs') },
+        { group: '命令', icon: 'fa-layer-group', label: '切换到版本视图', hint: '视图', run: () => switchView('versions') },
+    ];
+}
+
+function buildPaletteItems(q) {
+    const query = (q || '').trim().toLowerCase();
+    const hit = t => !query || String(t).toLowerCase().includes(query);
+    const out = [];
+
+    paletteCommands().forEach(c => {
+        if (hit(c.label) || hit(c.hint)) out.push(c);
+    });
+
+    (versions || []).forEach(v => {
+        const label = `${v.name} ${v.version_info || ''}`.trim();
+        if (!hit(label)) return;
+        const n = statsLaunches(v.id);
+        out.push({
+            group: '版本', icon: 'fa-layer-group', label,
+            hint: n ? `已启动 ${n} 次` : '未启动过',
+            run: () => focusVersionCard(v.id),
+        });
+    });
+
+    (globalPacks || []).forEach(p => {
+        const label = p.name || p.id;
+        if (!hit(label)) return;
+        out.push({ group: '整合包', icon: 'fa-boxes', label, hint: '定位到该整合包', run: () => focusPackCard(p.id) });
+    });
+
+    // 模组条目较多，只在输入了关键词时才列（最多 20 条）
+    if (query) {
+        const mods = ((modMeta && modMeta.mods) || []).filter(m =>
+            hit(m.display_name) || hit(m.name));
+        mods.slice(0, 20).forEach(m => out.push({
+            group: '模组', icon: 'fa-puzzle-piece',
+            label: m.display_name || m.name,
+            hint: m.name,
+            run: () => openModDetail(m.name),
+        }));
+    }
+
+    return out.slice(0, 60);
+}
+
+function renderPaletteResults(q) {
+    _paletteItems = buildPaletteItems(q);
+    _paletteSel = 0;
+    const el = document.getElementById('paletteResults');
+    if (!_paletteItems.length) {
+        el.innerHTML = emptyInlineHtml('fa-magnifying-glass', '没有匹配项');
+        return;
+    }
+    let html = '', lastGroup = null;
+    _paletteItems.forEach((it, i) => {
+        if (it.group !== lastGroup) {
+            html += `<div class="palette-group">${escapeHtml(it.group)}</div>`;
+            lastGroup = it.group;
+        }
+        html += `<div class="palette-row${i === 0 ? ' sel' : ''}" data-palette-idx="${i}">
+            <i class="fas ${it.icon} palette-icon"></i>
+            <span class="palette-label">${escapeHtml(it.label)}</span>
+            ${it.hint ? `<span class="palette-hint">${escapeHtml(it.hint)}</span>` : ''}
+        </div>`;
+    });
+    el.innerHTML = html;
+}
+
+function highlightPalette() {
+    const el = document.getElementById('paletteResults');
+    el.querySelectorAll('.palette-row').forEach((row, i) => {
+        const sel = (i === _paletteSel);
+        row.classList.toggle('sel', sel);
+        if (sel) row.scrollIntoView({ block: 'nearest' });
+    });
+}
+
+function movePalette(delta) {
+    if (!_paletteItems.length) return;
+    _paletteSel = (_paletteSel + delta + _paletteItems.length) % _paletteItems.length;
+    highlightPalette();
+}
+
+function runPaletteSelection() {
+    const it = _paletteItems[_paletteSel];
+    if (!it) return;
+    closeCommandPalette();
+    try { it.run(); } catch (e) { showAppAlert('执行失败: ' + e.message); }
+}
+
+function openCommandPalette() {
+    _paletteOpen = true;
+    const wrap = document.getElementById('commandPalette');
+    const input = document.getElementById('paletteInput');
+    wrap.style.display = '';
+    input.value = '';
+    renderPaletteResults('');
+    input.focus();
+}
+
+function closeCommandPalette() {
+    _paletteOpen = false;
+    const wrap = document.getElementById('commandPalette');
+    if (wrap) wrap.style.display = 'none';
+}
+
+function focusVersionCard(versionId) {
+    switchView('versions');
+    setTimeout(() => {
+        const el = document.querySelector(`.version-card[data-version="${CSS.escape(versionId)}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('palette-flash');
+        void el.offsetWidth;
+        el.classList.add('palette-flash');
+    }, 140);
+}
+
+function focusPackCard(packId) {
+    switchView('packs');
+    setTimeout(() => {
+        const btn = document.querySelector(`#packListView [data-pack="${CSS.escape(packId)}"]`);
+        if (!btn) return;
+        const card = btn.closest('.card') || btn;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.remove('palette-flash');
+        void card.offsetWidth;
+        card.classList.add('palette-flash');
+    }, 140);
+}
+
+function initCommandPalette() {
+    document.addEventListener('keydown', e => {
+        const k = (e.key || '').toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && k === 'k') {
+            e.preventDefault();
+            if (_paletteOpen) closeCommandPalette(); else openCommandPalette();
+            return;
+        }
+        if (!_paletteOpen) return;
+        if (k === 'escape') { e.preventDefault(); closeCommandPalette(); }
+        else if (k === 'arrowdown') { e.preventDefault(); movePalette(1); }
+        else if (k === 'arrowup') { e.preventDefault(); movePalette(-1); }
+        else if (k === 'enter') { e.preventDefault(); runPaletteSelection(); }
+    });
+    const input = document.getElementById('paletteInput');
+    if (input) input.addEventListener('input', () => renderPaletteResults(input.value));
+    const res = document.getElementById('paletteResults');
+    if (!res) return;
+    res.addEventListener('click', e => {
+        const row = e.target.closest('[data-palette-idx]');
+        if (!row) return;
+        _paletteSel = Number(row.dataset.paletteIdx) || 0;
+        runPaletteSelection();
+    });
+    res.addEventListener('mousemove', e => {
+        const row = e.target.closest('[data-palette-idx]');
+        if (!row) return;
+        const i = Number(row.dataset.paletteIdx) || 0;
+        if (i !== _paletteSel) { _paletteSel = i; highlightPalette(); }
+    });
+}
+
+
+/* ============================================================
+   模块：本地模组版本回滚（只针对本地 Mods 目录）
+   —— 快照仓库在程序目录的 mod_snapshots/ 下：<内部名>.json（版本列表）+ <内部名>/<版本>.tmod。
+   —— 关键性质：**回滚永远不改变版本列表的条数**；「当前版本」靠内容命中判定、不落库。
+   —— 拖放：WebView2 拿不到拖进来文件的真实路径（Chromium 没有 Electron 的 File.path），
+      所以前端读文件头做归位/校验，再把文件本体 POST 上去。
+   ============================================================ */
+let _mv = { mods: [], sel: null, detail: null, busy: false };
+
+function openModVersionsModal() {
+    _clearModalBackdrop();
+    new bootstrap.Modal(document.getElementById('modVersionsModal')).show();
+    loadModVersions();
+}
+
+async function loadModVersions() {
+    const list = document.getElementById('mvList');
+    if (list) list.innerHTML = skeletonHtml(6);
+    let d = null;
+    try { d = await (await fetch('/api/mod_versions')).json(); } catch (e) { d = null; }
+
+    _mv.mods = (d && d.mods) || [];
+    const md = document.getElementById('mvModsDir'), sd = document.getElementById('mvSnapDir'), cnt = document.getElementById('mvCount');
+    if (md) md.textContent = d ? '模组目录：' + d.mods_dir : '';
+    if (sd) sd.textContent = d ? '快照目录：' + d.snapshot_dir + ' · 占用 ' + fmtSize(d.snapshot_bytes) : '';
+    if (cnt) cnt.textContent = _mv.mods.length ? '共 ' + _mv.mods.length + ' 个' : '';
+
+    renderModVersionList();
+    if (_mv.sel && _mv.mods.some(m => m.internal_name === _mv.sel)) openModVersionDetail(_mv.sel);
+    else if (_mv.mods.length) openModVersionDetail(_mv.mods[0].internal_name);
+    else document.getElementById('mvDetail').innerHTML = emptyInlineHtml('fa-code-branch', '本地 Mods 目录里还没有模组。');
+}
+
+function renderModVersionList() {
+    const el = document.getElementById('mvList');
+    if (!el) return;
+    const q = (document.getElementById('mvSearch').value || '').trim().toLowerCase();
+    const rows = _mv.mods.filter(m => !q || m.internal_name.toLowerCase().includes(q));
+    if (!rows.length) {
+        el.innerHTML = emptyInlineHtml('fa-magnifying-glass', _mv.mods.length ? '没有匹配的模组。' : '本地 Mods 目录里还没有模组。');
+        return;
+    }
+    el.innerHTML = rows.map(m => {
+        let badge = '';
+        if (m.state === 'duplicate') badge = '<span class="mv-badge warn" title="Mods 目录里有多个同名文件，tModLoader 只会加载其中一个">同名冲突</span>';
+        else if (m.state === 'unarchived') badge = '<span class="mv-badge warn" title="当前版本还没归档，回滚到别的版本会把它覆盖掉">未归档</span>';
+        else if (m.state === 'missing') badge = '<span class="mv-badge muted">未安装</span>';
+        return `<div class="mv-row${m.internal_name === _mv.sel ? ' sel' : ''}" data-mv-name="${escapeHtml(m.internal_name)}">
+            <div class="mv-row-top">
+                <span class="mv-name">${escapeHtml(m.internal_name)}</span>
+                <span class="mv-ver">${escapeHtml(m.current_version || '')}</span>
+            </div>
+            <div class="mv-row-sub"><span>${m.version_count} 个版本</span>${badge}</div>
+        </div>`;
+    }).join('');
+}
+
+async function openModVersionDetail(name) {
+    _mv.sel = name;
+    renderModVersionList();
+    const box = document.getElementById('mvDetail');
+    if (!box) return;
+    box.innerHTML = skeletonHtml(5);
+    let d = null;
+    try { d = await (await fetch('/api/mod_versions/detail?name=' + encodeURIComponent(name))).json(); } catch (e) { d = null; }
+    if (!d || d.error) { box.innerHTML = emptyInlineHtml('fa-triangle-exclamation', (d && d.error) || '读取失败'); return; }
+    _mv.detail = d;
+    box.innerHTML = modVersionDetailHtml(d);
+}
+
+function modVersionDetailHtml(d) {
+    const cur = (d.versions || []).find(v => v.is_current);
+    let h = `<div class="mv-detail-head">
+        <div class="mv-detail-name">${escapeHtml(d.internal_name)}</div>
+        <div class="mv-detail-sub mv-dim">${cur
+            ? '当前 ' + escapeHtml(cur.version) + ' · build ' + escapeHtml(cur.build || '未知')
+            : (d.state === 'missing' ? '本地没装，只能从快照回滚回来' : '当前版本未归档')}</div>
+    </div>`;
+
+    if (d.state === 'duplicate') {
+        h += `<div class="mv-warnbox">
+            <div class="mv-warn-title"><i class="fas fa-triangle-exclamation me-1"></i>Mods 目录里有 ${d.local_files.length} 个同名文件</div>
+            <div class="mv-dim mb-1">tModLoader 只会加载其中一个，而且顺序不确定。选一个作为当前版本，其余会被收进快照。</div>
+            ${d.local_files.map(f => `<div class="mv-dup-row">
+                <div class="mv-dup-main">
+                    <div><b>${escapeHtml(f.version)}</b> <span class="mv-dim">build ${escapeHtml(f.build || '未知')}</span>${f.disabled ? ' <span class="mv-badge muted">已禁用</span>' : ''}</div>
+                    <div class="mv-dim mv-ellip">${escapeHtml(f.file_name)} · ${fmtSize(f.size)}</div>
+                </div>
+                <button class="btn btn-sm btn-outline-warning" data-mv-setcur="${escapeHtml(f.file_name)}">设为当前版本</button>
+            </div>`).join('')}
+        </div>`;
+    } else if (d.state === 'unarchived') {
+        h += `<div class="mv-warnbox">
+            <div class="mv-warn-title"><i class="fas fa-triangle-exclamation me-1"></i>当前版本还没有归档</div>
+            <div class="mv-dim">回滚到别的版本会把它覆盖掉。想留住它就把它拖进来，或用「添加版本…」。</div>
+        </div>`;
+    }
+
+    h += `<div class="mv-sec-title"><span>版本列表（${d.versions.length}）</span>
+        <button class="btn btn-sm btn-outline-info" onclick="pickModVersionFile()"><i class="fas fa-plus me-1"></i>添加版本…</button></div>`;
+
+    if (!d.versions.length) {
+        h += `<div class="mv-dim">还没有任何版本。</div>`;
+    } else {
+        h += d.versions.map(v => `<div class="mv-ver-row${v.is_current ? ' cur' : ''}">
+            <div class="mv-ver-main">
+                <span class="mv-ver-no">${v.is_current ? '<i class="fas fa-circle-check me-1"></i>' : '<i class="far fa-circle me-1"></i>'}${escapeHtml(v.version)}</span>
+                <span class="mv-dim">build ${escapeHtml(v.build || '未知')} · ${fmtSize(v.size)}</span>
+                ${v.stored === 'in_place'
+                    ? '<span class="mv-badge muted" title="内容就是 Mods 目录里那个文件，没有另存">本地</span>'
+                    : '<span class="mv-badge pool" title="内容存在快照文件夹里">快照</span>'}
+            </div>
+            <div class="mv-ver-sub mv-dim mv-ellip">${escapeHtml(v.original_file || '')}${v.added ? ' · ' + fmtDateTime(v.added * 1000) : ''}</div>
+            <div class="mv-ver-actions">${v.is_current
+                ? '<span class="mv-curtag">当前</span>'
+                : `<button class="btn btn-sm btn-outline-success" data-mv-rollback="${escapeHtml(v.sha256)}"><i class="fas fa-rotate-left me-1"></i>回滚到该版本</button>
+                   <button class="btn btn-sm btn-outline-danger" data-mv-del="${escapeHtml(v.sha256)}" title="从版本列表里删掉这一份快照"><i class="fas fa-trash"></i></button>`}
+            </div>
+        </div>`).join('');
+    }
+
+    if (!d.has_rollback) h += `<div class="mv-empty">该模组还没有可用的回滚版本。</div>`;
+    return h;
+}
+
+/* ---------- 动作 ---------- */
+
+async function _mvPost(url, body) {
+    try {
+        const res = await fetch(url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const d = await res.json().catch(() => null);
+        if (!res.ok) return { error: (d && d.error) || ('HTTP ' + res.status) };
+        return d || {};
+    } catch (e) { return { error: e.message }; }
+}
+
+function rollbackModVersion(sha) {
+    const d = _mv.detail;
+    if (!d) return;
+    const v = (d.versions || []).find(x => x.sha256 === sha);
+    const warn = d.state === 'unarchived'
+        ? '\n\n⚠ Mods 目录里当前的版本还没归档，回滚后它会丢失。' : '';
+    showAppConfirm(
+        `把「${d.internal_name}」回滚到 ${v ? v.version : ''}？\nMods 目录里对应的 .tmod 会被替换成这一版。${warn}`,
+        () => doRollbackModVersion(sha, d.state === 'unarchived'), '回滚版本');
+}
+
+async function doRollbackModVersion(sha, force) {
+    const d = _mv.detail;
+    if (!d) return;
+    const r = await _mvPost('/api/mod_versions/rollback', { name: d.internal_name, sha256: sha, force: !!force });
+    if (r.error) { showAppAlert(r.error); return; }
+    showToast('已回滚到 ' + (r.versions || []).filter(v => v.is_current).map(v => v.version).join(''), '回滚完成');
+    loadModVersions();
+}
+
+function deleteModVersion(sha) {
+    const d = _mv.detail;
+    if (!d) return;
+    const v = (d.versions || []).find(x => x.sha256 === sha);
+    showAppConfirm(
+        `从版本列表里删掉 ${v ? v.version : ''}？\n快照文件会被删除，删了就找不回来了。`,
+        async () => {
+            const r = await _mvPost('/api/mod_versions/delete', { name: d.internal_name, sha256: sha });
+            if (r.error) { showAppAlert(r.error); return; }
+            showToast('已删除', '完成');
+            loadModVersions();
+        }, '删除版本');
+}
+
+function setCurrentModVersion(fileName) {
+    const d = _mv.detail;
+    if (!d) return;
+    const f = (d.local_files || []).find(x => x.file_name === fileName);
+    showAppConfirm(
+        `把「${d.internal_name}」的当前版本设为 ${f ? f.version : fileName}？\n\n` +
+        'Mods 目录里其余的同名文件会先被收进快照，再从 Mods 目录移走。',
+        async () => {
+            const r = await _mvPost('/api/mod_versions/set_current', { name: d.internal_name, file_name: fileName });
+            if (r.error) { showAppAlert(r.error); return; }
+            showToast('已设为当前版本', '完成');
+            loadModVersions();
+        }, '仲裁同名冲突');
+}
+
+function pickModVersionFile() {
+    const el = document.getElementById('mvFileInput');
+    if (el) el.click();
+}
+
+function openModVersionsFolder() {
+    fetch('/api/mod_versions/open_folder', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => { if (d && d.error) showAppAlert(d.error); })
+        .catch(e => showAppAlert('打开失败: ' + e.message));
+}
+
+/* ---------- 拖放 / 选文件 ---------- */
+
+// .tmod 头部：'TMOD' + 7bit(tML版本) + SHA1(20) + 签名(256) + u32 + 7bit(内部ID) + 7bit(版本)
+function parseTmodHeader(buf) {
+    if (!buf || buf.byteLength < 300) return null;
+    const dv = new DataView(buf);
+    if (dv.getUint32(0, true) !== 0x444F4D54) return null;
+    let p = 4;
+    const rd7 = () => {
+        let r = 0, s = 0;
+        for (let i = 0; i < 5; i++) {
+            const b = dv.getUint8(p++);
+            r |= (b & 0x7f) << s;
+            if (!(b & 0x80)) return r;
+            s += 7;
+        }
+        return -1;
+    };
+    const rdStr = () => {
+        const n = rd7();
+        if (n < 0 || p + n > dv.byteLength) throw new Error('bad');
+        const s = new TextDecoder().decode(new Uint8Array(buf, p, n));
+        p += n;
+        return s;
+    };
+    try {
+        const build = rdStr();
+        p += 20 + 256 + 4;
+        const name = rdStr();
+        const version = rdStr();
+        return name ? { build, name, version } : null;
+    } catch (e) { return null; }
+}
+
+// targetName 为 null 时按文件自己的内部名归位
+async function acceptModVersionFile(file, targetName) {
+    if (_mv.busy) return;
+    if (!/\.tmod(\.disabled)?$/i.test(file.name)) { showAppAlert('只支持 .tmod 文件。'); return; }
+
+    let h = null;
+    try { h = parseTmodHeader(await file.slice(0, 2048).arrayBuffer()); } catch (e) { h = null; }
+    if (!h) { showAppAlert('这不是一个有效的 .tmod 文件（读不出文件头）。'); return; }
+
+    const name = targetName || h.name;
+    if (targetName && targetName.toLowerCase() !== h.name.toLowerCase()) {
+        showAppAlert(`这是「${h.name}」的文件，不是「${targetName}」。`);
+        return;
+    }
+
+    _mv.busy = true;
+    const mask = document.getElementById('mvDropMask');
+    const mt = mask && mask.querySelector('.mv-droptext');
+    if (mt) mt.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>正在添加 ' + escapeHtml(file.name) + '…';
+    if (mask) mask.classList.add('on');
+    try {
+        const res = await fetch('/api/mod_versions/upload?name=' + encodeURIComponent(name) +
+                                '&file=' + encodeURIComponent(file.name), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file
+        });
+        const d = await res.json().catch(() => null);
+        if (!res.ok) { showAppAlert((d && d.error) || '添加失败'); return; }
+        showToast(`${h.name} ${h.version} 已加进版本列表`, '添加成功');
+        _mv.sel = name;
+        loadModVersions();
+    } catch (e) {
+        showAppAlert('添加失败：' + e.message);
+    } finally {
+        _mv.busy = false;
+        if (mask) mask.classList.remove('on');
+    }
+}
+
+function initModVersionsModal() {
+    const modal = document.getElementById('modVersionsModal');
+    if (!modal) return;
+
+    modal.addEventListener('click', e => {
+        const row = e.target.closest('[data-mv-name]');
+        if (row) { openModVersionDetail(row.dataset.mvName); return; }
+        const rb = e.target.closest('[data-mv-rollback]');
+        if (rb) { rollbackModVersion(rb.dataset.mvRollback); return; }
+        const del = e.target.closest('[data-mv-del]');
+        if (del) { deleteModVersion(del.dataset.mvDel); return; }
+        const sc = e.target.closest('[data-mv-setcur]');
+        if (sc) { setCurrentModVersion(sc.dataset.mvSetcur); }
+    });
+
+    const search = document.getElementById('mvSearch');
+    if (search) search.addEventListener('input', renderModVersionList);
+
+    const picker = document.getElementById('mvFileInput');
+    if (picker) picker.addEventListener('change', () => {
+        const f = picker.files && picker.files[0];
+        picker.value = '';
+        if (f) acceptModVersionFile(f, null);
+    });
+
+    // 拖放：拖到某一行 = 加到那一行名下；拖到空白 = 按文件自己的内部名归位
+    const mask = document.getElementById('mvDropMask');
+    let depth = 0;
+    const dropName = target => {
+        const row = target && target.closest ? target.closest('[data-mv-name]') : null;
+        return row ? row.dataset.mvName : null;
+    };
+    const hasFiles = e => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+    const showMask = target => {
+        if (!mask) return;
+        const n = dropName(target);
+        const t = mask.querySelector('.mv-droptext');
+        if (t) t.innerHTML = '<i class="fas fa-file-arrow-down me-2"></i>' +
+            (n ? '松开 → 加到「' + escapeHtml(n) + '」' : '松开 → 按文件自己的模组名归位');
+        mask.classList.add('on');
+    };
+    const hideMask = () => { if (mask) mask.classList.remove('on'); depth = 0; };
+
+    modal.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; showMask(e.target); });
+    modal.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; showMask(e.target); });
+    modal.addEventListener('dragleave', e => { e.preventDefault(); if (--depth <= 0) hideMask(); });
+    modal.addEventListener('drop', e => {
+        e.preventDefault(); hideMask();
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) acceptModVersionFile(f, dropName(e.target));
+    });
+    modal.addEventListener('hidden.bs.modal', hideMask);
+
+    // 全窗兜底：不让浏览器把拖进来的文件当成导航（否则整个界面会被那个文件顶掉）
+    ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => { if (hasFiles(e)) e.preventDefault(); }));
+}
+
+// 新模块初始化：必须放在文件末尾 ——
+// 这些模块的 let 状态（themeMode / playStats / _saves / _logs 等）在下方才初始化，
+// 若在文件中部调用会撞上暂时性死区（ReferenceError）。
+initLogsModal();
+initSavesModal();
+initSnapshotsModal();
+initCapturesModal();
+initModVersionsModal();
+initCommandPalette();
+bindThemeSwitch();
+applyTheme();     // 先铺默认主题；metaSettings 回来后再覆盖
+loadStats();      // 版本卡片的「启动 N 次」徽章

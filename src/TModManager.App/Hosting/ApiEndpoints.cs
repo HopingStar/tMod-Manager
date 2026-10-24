@@ -6,13 +6,19 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using TModManager.Core.Captures;
 using TModManager.Core.Configuration;
 using TModManager.Core.Icons;
 using TModManager.Core.Logging;
+using TModManager.Core.Logs;
 using TModManager.Core.Models;
 using TModManager.Core.Mods;
+using TModManager.Core.ModVersions;
 using TModManager.Core.Network;
 using TModManager.Core.Processes;
+using TModManager.Core.Saves;
+using TModManager.Core.Snapshots;
+using TModManager.Core.Stats;
 using TModManager.Core.Storage;
 using TModManager.Core.Versions;
 
@@ -84,21 +90,184 @@ public static class ApiEndpoints
             return removed ? Results.Ok(new { message = "删除成功" }) : Results.Json(new { error = "版本不存在" }, statusCode: 404);
         });
 
-        api.MapPost("/versions/{id}/restore", async (string id, TmlProcessService procs, JsonStore store) =>
+        // 还原 enabled.json：改用「最近一次快照」。
+        // （原先读的 enabled.json.bk 只有一代、每次切包都被覆盖，连切两个包就把用户原本的配置永久冲掉了。）
+        api.MapPost("/versions/{id}/restore", async (string id, TmlProcessService procs, SnapshotService snapshots, JsonStore store) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == id);
             if (version == null) return Results.Json(new { error = "版本不存在" }, statusCode: 404);
             if (procs.IsRunning(true)) return Results.Json(new { error = "tModLoader 正在运行，无法还原 enabled.json" }, statusCode: 409);
+            if (string.IsNullOrWhiteSpace(version.ModsPath) || !Directory.Exists(version.ModsPath))
+                return Results.Json(new { error = "Mods 目录无效" }, statusCode: 400);
 
-            var modsDir = version.ModsPath;
-            if (string.IsNullOrEmpty(modsDir)) return Results.Json(new { error = "Mods 目录无效" }, statusCode: 400);
-            var backup = Path.Combine(modsDir, "enabled.json.bk");
-            var target = Path.Combine(modsDir, "enabled.json");
-            if (!File.Exists(backup)) return Results.Json(new { error = "没有备份可恢复" }, statusCode: 404);
+            var latest = snapshots.List().FirstOrDefault();
+            if (latest == null) return Results.Json(new { error = "还没有任何快照可还原" }, statusCode: 404);
 
-            File.Copy(backup, target, true);
-            return Results.Ok(new { message = "已还原到上次启动前的状态" });
+            snapshots.Capture(version.ModsPath!, "还原前（自动）", version.Name);   // 还原本身也可回退
+            var target = snapshots.Restore(latest.Id, version.ModsPath);
+            return target == null
+                ? Results.Json(new { error = "还原失败" }, statusCode: 500)
+                : Results.Ok(new { message = "已还原到最近一次快照", target });
+        });
+
+        // ---- enabled.json 快照（每次切换整合包前自动保存，存在程序目录的 snapshots/ 下）----
+        api.MapGet("/snapshots", (SnapshotService snapshots) => new
+        {
+            snapshots = snapshots.List(),
+            root = snapshots.SnapshotRoot,
+            keep = SnapshotService.KeepCount,
+        });
+
+        api.MapPost("/snapshots/restore", async (SnapshotRestoreRequest? body, TmlProcessService procs, SnapshotService snapshots, JsonStore store) =>
+        {
+            if (procs.IsRunning(true)) return Results.Json(new { error = "tModLoader 正在运行，无法还原 enabled.json" }, statusCode: 409);
+
+            var data = await store.ReadAsync();
+            var entry = snapshots.List().FirstOrDefault(x => x.Id == body?.Id);
+            if (entry == null) return Results.Json(new { error = "快照不存在" }, statusCode: 404);
+
+            // 写回哪个 Mods 目录：优先显式指定的版本 → 快照里记录的那个 → 任意一个有 Mods 路径的版本
+            var version = !string.IsNullOrWhiteSpace(body?.VersionId)
+                ? data.Versions.FirstOrDefault(x => x.Id == body!.VersionId)
+                : null;
+            var modsDir = version?.ModsPath;
+            if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir))
+                modsDir = entry.ModsDir;
+            if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir))
+                modsDir = data.Versions.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.ModsPath))?.ModsPath;
+            if (string.IsNullOrWhiteSpace(modsDir) || !Directory.Exists(modsDir))
+                return Results.Json(new { error = "找不到可写入的 Mods 目录" }, statusCode: 400);
+
+            snapshots.Capture(modsDir!, "还原前（自动）", version?.Name ?? "");   // 还原本身也可回退
+            var target = snapshots.Restore(entry.Id, modsDir);
+            return target == null
+                ? Results.Json(new { error = "还原失败（快照已损坏？）" }, statusCode: 500)
+                : Results.Ok(new { message = "已还原该快照", target });
+        });
+
+        api.MapPost("/snapshots/open_folder", (SnapshotService snapshots) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(snapshots.SnapshotRoot);
+                Process.Start(new ProcessStartInfo { FileName = snapshots.SnapshotRoot, UseShellExecute = true });
+                return Results.Ok(new { ok = true, folder = snapshots.SnapshotRoot });
+            }
+            catch (Exception e) { return Results.Json(new { error = "打开失败: " + e.Message }, statusCode: 500); }
+        });
+
+        // ---- 游戏截图（存档目录下的 Captures/）----
+        api.MapGet("/captures", (CapturesService captures) => new
+        {
+            captures = captures.List(),
+            dir = captures.CapturesDir,
+        });
+
+        api.MapGet("/captures/image", (string path, CapturesService captures) =>
+        {
+            var full = captures.ResolveImage(path);     // 只允许截图目录内的图片，防目录穿越
+            return full == null
+                ? Results.Json(new { error = "截图不存在或路径非法" }, statusCode: 404)
+                : Results.File(full, CapturesService.ContentTypeOf(full));
+        });
+
+        api.MapPost("/captures/open_folder", (CapturesService captures) =>
+        {
+            try
+            {
+                var dir = captures.CapturesDir;
+                if (!Directory.Exists(dir)) return Results.Json(new { error = "截图目录不存在" }, statusCode: 404);
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                return Results.Ok(new { ok = true, folder = dir });
+            }
+            catch (Exception e) { return Results.Json(new { error = "打开失败: " + e.Message }, statusCode: 500); }
+        });
+
+        // ---- 本地模组版本回滚（**只针对本地 Mods 目录**）----
+        // 仓库在程序目录的 mod_snapshots/ 下：<内部名>.json（版本列表）+ <内部名>/<版本>.tmod（内容）。
+        // 关键性质：**回滚永远不改变版本列表的条数**；「当前版本」不落库，靠内容命中判定。
+        api.MapGet("/mod_versions", (ModVersionService mv) => mv.List());
+
+        api.MapGet("/mod_versions/detail", (string? name, ModVersionService mv) =>
+        {
+            var d = string.IsNullOrWhiteSpace(name) ? null : mv.Detail(name!);
+            return d is null ? Results.Json(new { error = "模组不存在" }, statusCode: 404) : Results.Json(d);
+        });
+
+        api.MapPost("/mod_versions/add", (ModVersionAddRequest? body, ModVersionService mv, TmlProcessService procs) =>
+        {
+            if (procs.IsRunning(true))
+                return Results.Json(new { error = "tModLoader 正在运行，模组文件被占用，暂时不能改动" }, statusCode: 409);
+            try { return Results.Ok(mv.AddVersion(body?.Name ?? "", body?.Path ?? "")); }
+            catch (ModVersionException e) { return Results.Json(new { error = e.Message }, statusCode: 400); }
+        });
+
+        // 拖放走这条：WebView2 拿不到拖进来的文件真实路径（Chromium 没有 Electron 的 File.path），
+        // 所以前端把文件本体 POST 上来，先落成临时文件再走与「按路径添加」完全相同的逻辑。
+        api.MapPost("/mod_versions/upload", async (HttpRequest req, string? name, string? file, ModVersionService mv, TmlProcessService procs) =>
+        {
+            if (procs.IsRunning(true))
+                return Results.Json(new { error = "tModLoader 正在运行，模组文件被占用，暂时不能改动" }, statusCode: 409);
+            if (string.IsNullOrWhiteSpace(name))
+                return Results.Json(new { error = "缺少模组名" }, statusCode: 400);
+
+            var tmp = Path.Combine(Path.GetTempPath(), "tmm-up-" + Guid.NewGuid().ToString("N") + ".tmod");
+            try
+            {
+                var expected = req.ContentLength;
+                await using (var fs = File.Create(tmp))
+                    await req.Body.CopyToAsync(fs);
+
+                // 传了一半就断线的话，文件头多半还是好的 —— 光靠文件头校验会把**截断的 .tmod**
+                // 当成正常版本归档进去。所以拿 Content-Length 对一下。
+                // 只拦「收到的比声明的少」，不比相等 —— 多余字节不可能是我们造成的，宁可放过也别误杀。
+                var written = new FileInfo(tmp).Length;
+                if (expected is > 0 && written < expected)
+                    return Results.Json(new { error = $"上传不完整（收到 {written} / {expected} 字节），请重试" }, statusCode: 400);
+
+                return Results.Ok(mv.AddVersion(name!, tmp, file));
+            }
+            catch (ModVersionException e) { return Results.Json(new { error = e.Message }, statusCode: 400); }
+            catch (Exception e) { return Results.Json(new { error = "上传失败: " + e.Message }, statusCode: 500); }
+            finally { try { File.Delete(tmp); } catch { } }
+        });
+
+        api.MapPost("/mod_versions/rollback", (ModVersionRollbackRequest? body, ModVersionService mv, TmlProcessService procs) =>
+        {
+            if (procs.IsRunning(true))
+                return Results.Json(new { error = "tModLoader 正在运行，模组文件被占用，暂时不能回滚" }, statusCode: 409);
+            try { return Results.Ok(mv.Rollback(body?.Name ?? "", body?.Sha256 ?? "", body?.Force ?? false)); }
+            catch (ModVersionException e) { return Results.Json(new { error = e.Message }, statusCode: 400); }
+        });
+
+        api.MapPost("/mod_versions/set_current", (ModVersionSetCurrentRequest? body, ModVersionService mv, TmlProcessService procs) =>
+        {
+            if (procs.IsRunning(true))
+                return Results.Json(new { error = "tModLoader 正在运行，模组文件被占用，暂时不能仲裁" }, statusCode: 409);
+            try { return Results.Ok(mv.SetCurrent(body?.Name ?? "", body?.FileName ?? "")); }
+            catch (ModVersionException e) { return Results.Json(new { error = e.Message }, statusCode: 400); }
+        });
+
+        api.MapPost("/mod_versions/delete", (ModVersionDeleteRequest? body, ModVersionService mv) =>
+        {
+            try
+            {
+                var d = mv.DeleteVersion(body?.Name ?? "", body?.Sha256 ?? "");
+                return d is null ? Results.Ok(new { ok = true }) : Results.Ok(d);
+            }
+            catch (ModVersionException e) { return Results.Json(new { error = e.Message }, statusCode: 400); }
+        });
+
+        api.MapPost("/mod_versions/open_folder", (ModVersionService mv) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(mv.Root);
+                Process.Start(new ProcessStartInfo { FileName = mv.Root, UseShellExecute = true });
+                return Results.Ok(new { ok = true, folder = mv.Root });
+            }
+            catch (Exception e) { return Results.Json(new { error = "打开失败: " + e.Message }, statusCode: 500); }
         });
 
         api.MapPost("/versions/{id}/rename", async (string id, RenameVersionRequest? body, JsonStore store) =>
@@ -143,6 +312,22 @@ public static class ApiEndpoints
         {
             var (r, status, err) = await mods.VersionModsAsync(id);
             return status == 200 ? Results.Ok(r) : Results.Json(new { error = err }, statusCode: status);
+        });
+
+        // 启动前体检：enabled.json 里启用、但该版本（本地 Mods ∪ 该版本 Workshop）里找不到的模组。
+        // 只用于提示，不阻断启动 —— 所以单独给一个精简响应，避免每次启动都拉整份模组列表。
+        api.MapGet("/versions/{id}/missing_mods", async (string id, ModsService mods) =>
+        {
+            var (r, status, err) = await mods.VersionModsAsync(id);
+            if (r == null) return Results.Json(new { error = err }, statusCode: status);
+            return Results.Ok(new
+            {
+                missing = r.Missing.Select(m => m.Name).ToList(),
+                missing_count = r.Missing.Count,
+                enabled_count = r.Enabled.Count + r.Missing.Count,   // enabled.json 里的总数
+                available_count = r.Enabled.Count + r.Disabled.Count,
+                version_name = r.VersionName,
+            });
         });
 
         api.MapPost("/versions/{id}/packs", async (string id, AddPackRequest? body, ModsService mods, JsonStore store) =>
@@ -331,6 +516,8 @@ public static class ApiEndpoints
             return new
             {
                 backend_ok = true,
+                // 配置读取出过问题（损坏 / 从备份恢复）时透出给界面，别让用户以为版本被删了
+                data_warning = store.LastLoadWarning,
                 tmodloader_running = procs.IsRunning(),
                 version_name = versionName,
                 pack_name = packName,
@@ -425,7 +612,7 @@ public static class ApiEndpoints
         });
 
         // ---- 启动整合包 / 直接启动 ----
-        api.MapPost("/versions/{versionId}/launch/{packId}", async (string versionId, string packId, TmlProcessService procs, ModsService mods, SpecialLoadService special, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch/{packId}", async (string versionId, string packId, TmlProcessService procs, ModsService mods, SpecialLoadService special, StatsService stats, SnapshotService snapshots, JsonStore store) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -433,24 +620,31 @@ public static class ApiEndpoints
             if (!version.Packs.Contains(packId)) return Results.Json(new { error = "该版本未添加此整合包" }, statusCode: 400);
             if (procs.IsRunning(true)) return Results.Json(new { error = "tModLoader 正在运行，无法启动新的实例" }, statusCode: 409);
 
-            var modsDir = version.ModsPath;
-            var target = Path.Combine(modsDir ?? "", "enabled.json");
-            var backup = Path.Combine(modsDir ?? "", "enabled.json.bk");
+            if (string.IsNullOrWhiteSpace(version.ModsPath) || !Directory.Exists(version.ModsPath))
+                return Results.Json(new { error = "Mods 目录不存在" }, statusCode: 400);
+
+            // ③ 路径归一化：mods_path 里出现过正斜杠/相对写法，必须转成绝对路径再拼
+            string modsDir;
+            try { modsDir = Path.GetFullPath(version.ModsPath); }
+            catch (Exception e) { return Results.Json(new { error = $"Mods 目录无效: {e.Message}" }, statusCode: 400); }
+
+            var target = Path.Combine(modsDir, "enabled.json");
             var src = Path.Combine(mods.GlobalModpacksPath, packId, "Mods", "enabled.json");
             if (!File.Exists(src)) return Results.Json(new { error = $"整合包文件缺失: {src}" }, statusCode: 404);
-            if (string.IsNullOrEmpty(modsDir) || !Directory.Exists(modsDir)) return Results.Json(new { error = "Mods 目录不存在" }, statusCode: 400);
 
-            try
-            {
-                if (File.Exists(target)) File.Copy(target, backup, true);
-                else File.WriteAllText(backup, "[]");
-            }
-            catch (Exception e) { return Results.Json(new { error = $"备份失败: {e.Message}" }, statusCode: 500); }
+            // ① 内容校验：空数组 / 坏 JSON 的 enabled.json 会把**全部模组禁用**，必须拦下
+            if (!SnapshotService.TryReadEnabledList(src, out var packNames, out var badReason))
+                return Results.Json(new { error = $"整合包内容无效（{badReason}），已拒绝启动以免禁用全部模组" }, statusCode: 400);
+            if (packNames.Count == 0)
+                return Results.Json(new { error = "整合包内容为空（会禁用全部模组），已拒绝启动" }, statusCode: 400);
+
+            // ② 切换前把当前配置存成时间戳快照（取代原先只有一代的 enabled.json.bk）
+            var snapshot = snapshots.Capture(modsDir, $"切换前（{version.Name} / {packId}）", version.Name, packId);
 
             try { File.Copy(src, target, true); }
             catch (Exception e)
             {
-                if (File.Exists(backup)) File.Copy(backup, target, true);
+                if (snapshot != null) snapshots.Restore(snapshot.Id, modsDir);   // 回滚到刚存的那份
                 return Results.Json(new { error = $"覆盖失败: {e.Message}" }, statusCode: 500);
             }
 
@@ -461,21 +655,33 @@ public static class ApiEndpoints
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
                 {
-                    d.LastLaunch = new LastLaunch { VersionId = versionId, PackId = packId, Disabled = spSet };
+                    d.LastLaunch = new LastLaunch { VersionId = versionId, PackId = packId, Disabled = spSet, SnapshotId = snapshot?.Id };
                     return true;
                 });
+                await stats.RecordLaunchAsync(versionId, packId);   // 游玩统计：启动次数 +1，开始一次会话
+
                 var message = "游戏启动成功！";
                 if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
-                return Results.Ok(new { message });
+
+                // ④ 多版本共用同一个 Mods 目录：切包会把它们一起改掉，必须提示
+                var sharers = data.Versions
+                    .Where(v => !string.IsNullOrWhiteSpace(v.ModsPath) && SameDir(v.ModsPath!, modsDir))
+                    .Select(v => v.Name)
+                    .ToList();
+                var warning = sharers.Count > 1
+                    ? $"有 {sharers.Count} 个版本共用这个 Mods 目录（{string.Join("、", sharers)}），它们的启用集会被一起改掉。"
+                    : null;
+
+                return Results.Ok(new { message, warning, snapshot = snapshot?.Id });
             }
             catch (Exception e)
             {
-                if (File.Exists(backup)) File.Copy(backup, target, true);
+                if (snapshot != null) snapshots.Restore(snapshot.Id, modsDir);
                 return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500);
             }
         });
 
-        api.MapPost("/launch_current", async (TmlProcessService procs, SpecialLoadService special, JsonStore store) =>
+        api.MapPost("/launch_current", async (TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store) =>
         {
             var data = await store.ReadAsync();
             var last = data.LastLaunch;
@@ -494,6 +700,7 @@ public static class ApiEndpoints
                 else if (!string.IsNullOrEmpty(last.PackId))
                     spErrors = special.ApplyDisabledSet(special.PackSpecialSet(data, last.PackId));
                 TmlProcessService.LaunchBat(version.BatPath);
+                await stats.RecordLaunchAsync(last.VersionId, last.PackId);   // 游玩统计
                 var message = $"已用上次的启动方式启动（{version.Name}）";
                 if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
                 return Results.Ok(new { message });
@@ -501,7 +708,7 @@ public static class ApiEndpoints
             catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
         });
 
-        api.MapPost("/versions/{versionId}/launch_direct", async (string versionId, TmlProcessService procs, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch_direct", async (string versionId, TmlProcessService procs, StatsService stats, JsonStore store) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -516,6 +723,7 @@ public static class ApiEndpoints
                     d.LastLaunch = new LastLaunch { VersionId = versionId, PackId = null, Disabled = new List<string>() };
                     return true;
                 });
+                await stats.RecordLaunchAsync(versionId, null);   // 游玩统计
                 return Results.Ok(new { message = $"已直接启动（{version.Name}），使用当前 enabled.json" });
             }
             catch (Exception e) { return Results.Json(new { error = $"启动失败: {e.Message}" }, statusCode: 500); }
@@ -523,7 +731,7 @@ public static class ApiEndpoints
 
         // 「以特殊加载配置启动」：应用全局特殊加载配置（禁用列表内本地模组、优先 workshop 版本）后启动该版本。
         // 退出 tML 时自动还原全部 .tmod.disabled（TmlMonitorService.RestoreAllDisabled）。
-        api.MapPost("/versions/{versionId}/launch_special", async (string versionId, TmlProcessService procs, SpecialLoadService special, JsonStore store) =>
+        api.MapPost("/versions/{versionId}/launch_special", async (string versionId, TmlProcessService procs, SpecialLoadService special, StatsService stats, JsonStore store) =>
         {
             var data = await store.ReadAsync();
             var version = data.Versions.FirstOrDefault(x => x.Id == versionId);
@@ -543,6 +751,7 @@ public static class ApiEndpoints
                     d.LastLaunch = new LastLaunch { VersionId = versionId, PackId = null, Disabled = disabledSet.ToList() };
                     return true;
                 });
+                await stats.RecordLaunchAsync(versionId, null);   // 游玩统计
                 var message = $"已启动（{version.Name}），已应用全局特殊加载配置";
                 if (!data.GlobalSpecial.Active) message += "（全局特殊加载未开启，实际等价于直接启动）";
                 if (spErrors.Count > 0) message += "（特殊加载部分文件操作失败: " + string.Join("; ", spErrors) + "）";
@@ -589,6 +798,116 @@ public static class ApiEndpoints
             }
         });
 
+        // ---- 崩溃日志查看器 ----
+        api.MapGet("/logs", async (CrashLogService logs, JsonStore store) => logs.List(await store.ReadAsync()));
+
+        api.MapGet("/logs/content", async (string path, CrashLogService logs, JsonStore store) =>
+        {
+            var content = logs.Read(await store.ReadAsync(), path);
+            return content == null
+                ? Results.Json(new { error = "日志不存在或无权访问" }, statusCode: 404)
+                : Results.Ok(content);
+        });
+
+        api.MapPost("/logs/open_folder", async (OpenLogFolderRequest? body, CrashLogService logs, JsonStore store) =>
+        {
+            var dir = logs.ResolveDir(await store.ReadAsync(), body?.Path ?? "");
+            if (dir == null || !Directory.Exists(dir))
+                return Results.Json(new { ok = false, error = "日志目录不存在" }, statusCode: 404);
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                return Results.Ok(new { ok = true, folder = dir });
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new { ok = false, error = "打开失败: " + ex.Message }, statusCode: 500);
+            }
+        });
+
+        // ---- 存档管理（世界 / 人物）----
+        api.MapGet("/saves", (SavesService saves) => new
+        {
+            worlds = saves.ListWorlds(),
+            players = saves.ListPlayers(),
+            backups = saves.ListBackups(),
+            worlds_dir = saves.WorldsDir,
+            players_dir = saves.PlayersDir,
+            backup_dir = saves.BackupDir,
+        });
+
+        api.MapPost("/saves/backup", (SaveActionRequest? body, SavesService saves) =>
+        {
+            var path = saves.Backup(body?.Kind ?? "world", body?.Path ?? "");
+            return path == null
+                ? Results.Json(new { ok = false, error = "备份失败：文件不存在或路径非法" }, statusCode: 400)
+                : Results.Ok(new { ok = true, message = "已备份", backup = Path.GetFileName(path) });
+        });
+
+        api.MapPost("/saves/restore", (SaveActionRequest? body, SavesService saves) =>
+        {
+            var target = saves.Restore(body?.Path ?? "");
+            return target == null
+                ? Results.Json(new { ok = false, error = "还原失败：备份不存在或路径非法" }, statusCode: 400)
+                : Results.Ok(new { ok = true, message = "已还原", target });
+        });
+
+        api.MapPost("/saves/delete", (SaveActionRequest? body, SavesService saves) =>
+        {
+            var ok = body?.Backup == true
+                ? saves.DeleteBackup(body.Path ?? "")
+                : saves.DeleteSave(body?.Kind ?? "world", body?.Path ?? "");
+            return ok
+                ? Results.Ok(new { ok = true, message = "已删除（可在回收站找回）" })
+                : Results.Json(new { ok = false, error = "删除失败" }, statusCode: 400);
+        });
+
+        api.MapPost("/saves/open_folder", (SaveActionRequest? body, SavesService saves) =>
+        {
+            var dir = saves.ResolveOpenDir(body?.Kind ?? "world", body?.Path);
+            if (dir == null || !Directory.Exists(dir))
+                return Results.Json(new { ok = false, error = "目录不存在" }, statusCode: 404);
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                return Results.Ok(new { ok = true, folder = dir });
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new { ok = false, error = "打开失败: " + ex.Message }, statusCode: 500);
+            }
+        });
+
+        // ---- 游玩统计 ----
+        api.MapGet("/stats", async (JsonStore store) =>
+        {
+            var data = await store.ReadAsync();
+            var s = data.Stats;
+            var a = s.Active;
+            object? active = a == null ? null : new
+            {
+                version_id = a.VersionId,
+                pack_id = a.PackId,
+                started_at = a.StartedAt,
+                elapsed_seconds = Math.Max(0, (DateTimeOffset.UtcNow - a.StartedAt).TotalSeconds),
+            };
+            return new
+            {
+                total_seconds = s.TotalSeconds,
+                version_launches = s.VersionLaunches,
+                pack_launches = s.PackLaunches,
+                version_seconds = s.VersionSeconds,
+                pack_seconds = s.PackSeconds,
+                active,
+                recent = s.Recent,
+            };
+        });
+
+        api.MapPost("/stats/reset", async (StatsService stats) =>
+        {
+            await stats.ResetAsync();
+            return Results.Ok(new { ok = true, message = "统计已清空" });
+        });
         // ---- 加密图标 ----
         // 图标以 {哈希}.dat 加密存储（防普通用户用看图软件打开 / 从文件名猜模组）；
         // 此路由解密后返回原始 PNG。哈希严格校验（16 位 hex）防路径遍历；no-store 防浏览器缓存明文图片。
@@ -635,6 +954,19 @@ public static class ApiEndpoints
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr ShellExecute(IntPtr hwnd, string? lpOperation, string? lpFile,
         string? lpParameters, string? lpDirectory, int nShowCmd);
+
+    /// <summary>两个路径是否指向同一个目录（各自归一化后按大小写不敏感比较）。</summary>
+    private static bool SameDir(string a, string b)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(a).TrimEnd('\\', '/'),
+                Path.GetFullPath(b).TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
 
     /// <summary>业务异常：携带 HTTP 状态码，统一转成 {error} 响应。</summary>
     public sealed class ApiException : Exception

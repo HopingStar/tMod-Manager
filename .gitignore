@@ -4,15 +4,18 @@ obj/
 Release/
 
 # 运行时数据（用户个人配置/缓存，不入库）
-data.json
-mod_meta.json
+/data.json
+/mod_meta.json
 wwwroot/static/mod_icons/
+/backups/
+/snapshots/
+
 
 # WebView2 运行时缓存
 .webview2/
 
 # 日志
-logs/
+/logs/
 
 # IDE
 .vs/

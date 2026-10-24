@@ -28,23 +28,31 @@ public sealed class AppPaths
         DefaultModsPath = string.IsNullOrEmpty(defaultModsPath) ? DetectDefaultModsPath() : defaultModsPath;
     }
 
-    /// <summary>从 exe 目录解析运行根：向上找 TModManager.sln 定位仓库根；找不到则用 exe 目录。</summary>
+    /// <summary>
+    /// 从 exe 目录解析运行根。
+    /// <list type="bullet">
+    ///   <item>**发布 / 便携产物**：<c>wwwroot</c> 就躺在 exe 旁边 ⇒ 这是自包含的运行目录，
+    ///     运行根 = exe 目录，<c>data.json</c> / <c>logs/</c> / <c>backups/</c> / <c>snapshots/</c> 全都写在 exe 旁边。</item>
+    ///   <item>**开发构建**（<c>bin/Debug</c>、<c>bin/Release</c> 的输出目录没有 wwwroot）：
+    ///     向上找 <c>TModManager.sln</c> 定位仓库根，用仓库里的 wwwroot（前端源码），改完前端不用重新构建。</item>
+    /// </list>
+    /// </summary>
     public static AppPaths Resolve(string exeDir)
     {
-        string? repo = null;
-        var dir = new DirectoryInfo(exeDir);
+        var full = Path.GetFullPath(exeDir);
+
+        if (Directory.Exists(Path.Combine(full, "wwwroot")))
+            return new AppPaths(full);
+
+        var dir = new DirectoryInfo(full);
         while (dir != null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "TModManager.sln")))
-            {
-                repo = dir.FullName;
-                break;
-            }
+                return new AppPaths(dir.FullName);
             dir = dir.Parent;
         }
 
-        string baseDir = repo ?? Path.GetFullPath(exeDir);
-        return new AppPaths(baseDir);
+        return new AppPaths(full);
     }
 
     private static string DetectDefaultModsPath()
