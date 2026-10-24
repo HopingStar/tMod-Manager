@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Icons;
 
 /// <summary>图标 XOR 加密（密钥 0x5A）与 ICO 目录解析（对齐 Python 版 icon_util）。</summary>

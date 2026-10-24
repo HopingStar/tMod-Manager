@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 using Microsoft.Extensions.Hosting;
 using TModManager.Core.Mods;
 using TModManager.Core.Processes;

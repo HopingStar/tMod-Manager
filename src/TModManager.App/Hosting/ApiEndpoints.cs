@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;

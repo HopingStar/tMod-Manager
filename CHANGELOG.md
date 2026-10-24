@@ -87,7 +87,7 @@
 
 ### 其它
 
-- **开源协议由 MIT 改为 GNU General Public License v3.0（GPL-3.0）** —— 详见仓库根的 [`LICENSE`](LICENSE)。此前按 MIT 发布的版本仍可继续按 MIT 使用（协议变更不追溯已授予的许可）。
+- **开源协议由 MIT 改为 GNU General Public License v3.0 only（SPDX：`GPL-3.0-only`）** —— 详见仓库根的 [`LICENSE`](LICENSE)。此前按 MIT 发布的版本仍可继续按 MIT 使用（协议变更不追溯已授予的许可）。
 
 ---
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using TModManager.Core.Logging;

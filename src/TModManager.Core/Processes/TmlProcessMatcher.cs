@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Processes;
 
 /// <summary>精确判断进程是否为 tModLoader（对齐 Python _is_tmodloader_proc，避免误杀）。</summary>

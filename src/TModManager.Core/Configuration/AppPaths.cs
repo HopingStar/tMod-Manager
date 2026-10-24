@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Configuration;
 
 /// <summary>应用路径与常量（关键路径与 Python 版对齐，但数据完全独立）。</summary>

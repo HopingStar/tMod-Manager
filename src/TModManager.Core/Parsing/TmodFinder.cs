@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Parsing;
 
 /// <summary>找模组对应的 .tmod 文件路径：全局 Mods 目录（含 .tmod.disabled），再扫整合包目录。</summary>

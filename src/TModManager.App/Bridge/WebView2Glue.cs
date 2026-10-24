@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.App.Bridge;
 
 /// <summary>注入到页面文档开头的 glue 脚本：把宿主对象包装成前端期望的 window.pywebview.api 形状。</summary>

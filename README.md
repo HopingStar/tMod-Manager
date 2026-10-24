@@ -4,7 +4,7 @@
 
 ![版本](https://img.shields.io/badge/版本-v2.1.0-blueviolet)
 ![运行环境](https://img.shields.io/badge/运行环境-.NET%208-blue)
-![许可证](https://img.shields.io/badge/License-GPL--3.0-blue)
+![许可证](https://img.shields.io/badge/License-GPL--3.0--only-blue)
 
 深色界面的桌面小工具，基于 .NET 8 构建，支持多版本一键切换、整合包管理与 Steam Workshop 模组信息展示。所有数据**仅保存在本地**，不会上传任何信息。
 
@@ -126,4 +126,24 @@ wwwroot/               前端（独立副本，直接服务）
 
 - **作者**：HopingStar
 - **项目主页**：https://github.com/HopingStar/tMod-Manager
-- **许可证**：GNU General Public License v3.0（GPL-3.0，Copyright © 2026 HopingStar），详见 [`LICENSE`](LICENSE)
+- **许可证**：GNU General Public License v3.0 **only**（SPDX：`GPL-3.0-only`，Copyright © 2026 HopingStar），详见 [`LICENSE`](LICENSE)
+
+## License
+
+**GNU General Public License v3.0 only**（SPDX：`GPL-3.0-only`）
+
+tModManager — Copyright (C) 2026 HopingStar
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+完整协议全文见 [`LICENSE`](LICENSE)。

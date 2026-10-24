@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Parsing;
 
 /// <summary>.tmod 逆向解析结果。</summary>

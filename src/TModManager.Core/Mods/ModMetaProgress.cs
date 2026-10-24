@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 HopingStar
+
 namespace TModManager.Core.Mods;
 
 /// <summary>刷新模组元数据的进度快照（供 GET /api/mod_meta/progress 轮询）。</summary>
