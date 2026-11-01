@@ -658,6 +658,7 @@ public static class ApiEndpoints
             try
             {
                 // 启动后隐藏：只登记，由监控服务确认游戏进程起来后再隐藏
+                AppLog.Info($"请求启动游戏：{version.Name} / 整合包 {packId}；启动后隐藏={data.GetString("launch_window", "keep") == "hide"}");
                 if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
@@ -707,6 +708,7 @@ public static class ApiEndpoints
                     spErrors = special.ApplyDisabledSet(last.Disabled.ToHashSet(StringComparer.Ordinal));
                 else if (!string.IsNullOrEmpty(last.PackId))
                     spErrors = special.ApplyDisabledSet(special.PackSpecialSet(data, last.PackId));
+                AppLog.Info($"请求启动游戏（上次配置）：{version.Name}；启动后隐藏={data.GetString("launch_window", "keep") == "hide"}");
                 if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await stats.RecordLaunchAsync(last.VersionId, last.PackId);   // 游玩统计
@@ -730,6 +732,7 @@ public static class ApiEndpoints
             if (!File.Exists(version.BatPath)) return Results.Json(new { error = "启动文件不存在" }, statusCode: 400);
             try
             {
+                AppLog.Info($"请求直接启动游戏：{version.Name}；启动后隐藏={data.GetString("launch_window", "keep") == "hide"}");
                 if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>
@@ -763,6 +766,7 @@ public static class ApiEndpoints
             try
             {
                 var spErrors = special.ApplyDisabledSet(disabledSet);
+                AppLog.Info($"请求以特殊加载启动游戏：{version.Name}；启动后隐藏={data.GetString("launch_window", "keep") == "hide"}");
                 if (data.GetString("launch_window", "keep") == "hide") wc.RequestHideOnGameStart();
                 TmlProcessService.LaunchBat(version.BatPath);
                 await store.UpdateAsync(d =>

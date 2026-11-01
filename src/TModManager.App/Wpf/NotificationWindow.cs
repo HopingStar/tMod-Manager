@@ -143,21 +143,24 @@ public sealed class NotificationWindow : Window
         Grid.SetColumn(textStack, 1);
         grid.Children.Add(textStack);
 
+        // 卡片四角圆角；留出足够的外边距让阴影完整衰减。
+        // 之前 margin 只有 10px，而 BlurRadius=22 + ShadowDepth=4 的阴影会超出窗口边界被裁掉，
+        // 在桌面上会看到一圈「方形」的暗边 —— 看起来像圆角没生效。
         _card = new Border
         {
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = new CornerRadius(14),
             Background = bg,
             BorderBrush = border,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(14, 12, 16, 12),
-            Margin = new Thickness(10),
+            Margin = new Thickness(20),
             Child = grid,
             Effect = new DropShadowEffect
             {
-                BlurRadius = 22,
-                ShadowDepth = 4,
+                BlurRadius = 18,
+                ShadowDepth = 3,
                 Direction = 270,
-                Opacity = 0.42,
+                Opacity = 0.38,
                 Color = Colors.Black,
             },
         };

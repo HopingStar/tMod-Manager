@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Hosting;
 using TModManager.App.Wpf;
+using TModManager.Core.Logging;
 using TModManager.Core.Logs;
 using TModManager.Core.Models;
 using TModManager.Core.Mods;
@@ -87,7 +88,15 @@ public sealed class TmlMonitorService : IHostedService, IDisposable
                 if (running && !wasRunning)
                 {
                     // 启动接口只登记「想隐藏」，真正隐藏要等确认游戏进程起来 —— 启动失败时窗口不会消失
-                    if (_window.ConsumePendingHide()) _window.HideForGame();
+                    if (_window.ConsumePendingHide())
+                    {
+                        _window.HideForGame();
+                        AppLog.Info("检测到游戏启动，已隐藏启动器窗口");
+                    }
+                    else
+                    {
+                        AppLog.Info("检测到游戏启动（启动器保持显示）");
+                    }
                 }
 
                 if (wasRunning && !running)
@@ -123,9 +132,14 @@ public sealed class TmlMonitorService : IHostedService, IDisposable
         ExitAnalysis? analysis = null;
         try { analysis = _crash.AnalyzeLatest(data, active?.StartedAt); } catch { }
 
+        var wasHidden = _window.IsHiddenForGame;
         _window.ShowAfterGame();
+        if (wasHidden) AppLog.Info("游戏退出，已恢复启动器窗口");
 
         var crashed = analysis?.Crashed == true;
+        AppLog.Info(analysis == null
+            ? $"游戏退出：本次 {ExitReportService.FormatDuration(seconds)}（未读取到日志）"
+            : $"游戏退出：本次 {ExitReportService.FormatDuration(seconds)}；{(crashed ? "疑似异常：" + analysis.Summary : "正常退出")}");
         var title = crashed ? "游戏异常退出" : "游戏已退出";
         var message = crashed
             ? BuildCrashMessage(analysis!)

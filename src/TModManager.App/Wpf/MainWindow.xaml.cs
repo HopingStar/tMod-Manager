@@ -163,6 +163,8 @@ public partial class MainWindow : Window
         {
             Show();
         }
+
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
     }
 
